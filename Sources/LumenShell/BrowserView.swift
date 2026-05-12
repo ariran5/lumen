@@ -66,6 +66,8 @@ private struct StartPage: View {
     @State private var showPlayground: Bool = UserDefaults.standard.bool(forKey: "playground")
     @State private var showFastDemo: Bool = UserDefaults.standard.bool(forKey: "demo")
     @State private var showVirtualList: Bool = UserDefaults.standard.bool(forKey: "virtualList")
+    @State private var showRemoteApp: Bool = UserDefaults.standard.bool(forKey: "remote")
+    @State private var fastAppURL: String = UserDefaults.standard.string(forKey: "fastUrl") ?? "http://localhost:8080"
 
     var body: some View {
         VStack(spacing: 16) {
@@ -102,6 +104,36 @@ private struct StartPage: View {
                         .font(.callout)
                 }
                 .buttonStyle(.bordered)
+
+                Divider().padding(.vertical, 4)
+
+                VStack(spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "antenna.radiowaves.left.and.right")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TextField("http://localhost:8080", text: $fastAppURL)
+                            .textFieldStyle(.plain)
+                            .keyboardType(.URL)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .font(.system(.caption, design: .monospaced))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color(uiColor: .secondarySystemBackground),
+                                in: RoundedRectangle(cornerRadius: 8))
+
+                    Button {
+                        showRemoteApp = true
+                    } label: {
+                        Label("Load fast-app from URL", systemImage: "arrow.down.circle.fill")
+                            .font(.callout.weight(.medium))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(URL(string: fastAppURL) == nil)
+                }
             }
             .padding(.top, 8)
         }
@@ -115,6 +147,11 @@ private struct StartPage: View {
         }
         .sheet(isPresented: $showVirtualList) {
             VirtualListDemoView()
+        }
+        .sheet(isPresented: $showRemoteApp) {
+            if let url = URL(string: fastAppURL) {
+                RemoteFastAppView(url: url)
+            }
         }
     }
 }
