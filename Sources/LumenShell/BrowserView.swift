@@ -63,8 +63,10 @@ private struct ProgressOverlay: View {
 }
 
 private struct StartPage: View {
+    @State private var showPlayground: Bool = UserDefaults.standard.bool(forKey: "playground")
+
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 16) {
             Image(systemName: "globe.americas.fill")
                 .font(.system(size: 64))
                 .foregroundStyle(.tint)
@@ -73,8 +75,20 @@ private struct StartPage: View {
             Text("Enter a URL above to begin")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+
+            Button {
+                showPlayground = true
+            } label: {
+                Label("JavaScript Playground", systemImage: "chevron.left.forwardslash.chevron.right")
+                    .font(.callout)
+            }
+            .buttonStyle(.bordered)
+            .padding(.top, 8)
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .sheet(isPresented: $showPlayground) {
+            JSPlaygroundView()
+        }
     }
 }
