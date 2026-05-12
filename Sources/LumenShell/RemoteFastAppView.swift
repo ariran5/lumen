@@ -81,7 +81,7 @@ private struct RemoteFastAppHost: UIViewRepresentable {
         container.backgroundColor = UIColor(red: 0.06, green: 0.06, blue: 0.07, alpha: 1)
         container.coordinator = context.coordinator
 
-        let renderer = Renderer(rootLayer: container.layer)
+        let renderer = Renderer(hostView: container)
         let engine = JSEngine()
         engine.installRenderBridge(renderer: renderer)
         engine.installVirtualListBridge { [weak container] controller in

@@ -1,19 +1,31 @@
 import CoreGraphics
 import Foundation
+import JavaScriptCore
 import QuartzCore
 import UIKit
 
 @MainActor
 final class Renderer {
     let rootLayer: CALayer
+    private weak var hostView: UIView?
+
     private var lastTree: RenderNode?
 
     private(set) var lastLayerCount: Int = 0
     private(set) var lastRenderMs: Double = 0
 
+    private var tapHandlers: [ObjectIdentifier: JSValue] = [:]
+    private var tapProxy: TapProxy?
+
     init(rootLayer: CALayer) {
         self.rootLayer = rootLayer
         rootLayer.masksToBounds = true
+    }
+
+    convenience init(hostView: UIView) {
+        self.init(rootLayer: hostView.layer)
+        self.hostView = hostView
+        installTapGesture(on: hostView)
     }
 
     func render(_ tree: RenderNode) {
@@ -35,6 +47,7 @@ final class Renderer {
         CATransaction.setDisableActions(true)
 
         rootLayer.sublayers?.forEach { $0.removeFromSuperlayer() }
+        tapHandlers.removeAll(keepingCapacity: true)
         var counter = 0
         mount(node: tree, flex: flex, parent: rootLayer, parentOrigin: .zero, counter: &counter)
         lastLayerCount = counter
@@ -73,6 +86,9 @@ final class Renderer {
         applyVisualStyle(layer, style: node.style)
         if node.kind == .text, let textLayer = layer as? CATextLayer, let text = node.text {
             applyTextStyle(textLayer, text: text, style: node.style)
+        }
+        if let onTap = node.onTap {
+            tapHandlers[ObjectIdentifier(layer)] = onTap
         }
         parent.addSublayer(layer)
         counter += 1
@@ -121,5 +137,41 @@ final class Renderer {
         if style.borderRadius > 0 {
             layer.masksToBounds = true
         }
+    }
+
+    // MARK: Tap handling
+
+    private func installTapGesture(on host: UIView) {
+        let proxy = TapProxy(owner: self)
+        let recognizer = UITapGestureRecognizer(target: proxy, action: #selector(TapProxy.handle(_:)))
+        recognizer.cancelsTouchesInView = false
+        host.addGestureRecognizer(recognizer)
+        self.tapProxy = proxy
+    }
+
+    fileprivate func handleTap(at point: CGPoint) {
+        guard !tapHandlers.isEmpty else { return }
+
+        var current: CALayer? = rootLayer.hitTest(point)
+
+        while let layer = current {
+            if let handler = tapHandlers[ObjectIdentifier(layer)] {
+                _ = handler.call(withArguments: [])
+                return
+            }
+            current = layer.superlayer
+        }
+    }
+}
+
+@MainActor
+private final class TapProxy: NSObject {
+    weak var owner: Renderer?
+    init(owner: Renderer) { self.owner = owner }
+
+    @objc func handle(_ recognizer: UITapGestureRecognizer) {
+        guard let owner, let view = recognizer.view else { return }
+        let point = recognizer.location(in: view)
+        owner.handleTap(at: point)
     }
 }

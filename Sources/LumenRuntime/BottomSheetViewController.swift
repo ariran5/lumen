@@ -32,7 +32,7 @@ final class BottomSheetViewController: UIViewController {
             host.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
         contentView = host
-        renderer = Renderer(rootLayer: host.layer)
+        renderer = Renderer(hostView: host)
     }
 
     override func viewDidLayoutSubviews() {

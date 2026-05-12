@@ -11,37 +11,60 @@ struct RenderNode {
     var key: String?
     var style: ViewStyle = ViewStyle()
     var text: String?
+    var onTap: JSValue?
     var children: [RenderNode] = []
 }
 
 extension RenderNode {
     static func parse(_ value: JSValue) -> RenderNode? {
-        guard !value.isNull, !value.isUndefined,
-              let dict = value.toDictionary() as? [String: Any] else { return nil }
-        return parseDict(dict)
+        guard value.isObject, !value.isNull, !value.isUndefined else { return nil }
+        return parseValue(value)
     }
 
-    static func parseDict(_ dict: [String: Any]) -> RenderNode {
+    private static func parseValue(_ value: JSValue) -> RenderNode {
         var node = RenderNode()
-        if let type = dict["type"] as? String, let k = Kind(rawValue: type) {
+
+        if let type = string(value, "type"), let k = Kind(rawValue: type) {
             node.kind = k
         }
-        if let key = dict["key"] as? String {
+        if let key = string(value, "key") {
             node.key = key
         }
-        if let style = dict["style"] as? [String: Any] {
-            node.style = parseStyle(style)
-        }
-        if let text = dict["text"] as? String {
-            node.text = text
-        }
-        if let children = dict["children"] as? [Any] {
-            node.children = children.compactMap { item -> RenderNode? in
-                guard let d = item as? [String: Any] else { return nil }
-                return parseDict(d)
+        if let styleVal = subscript_(value, "style"), styleVal.isObject {
+            if let styleDict = styleVal.toDictionary() as? [String: Any] {
+                node.style = parseStyle(styleDict)
             }
         }
+        if let text = string(value, "text") {
+            node.text = text
+        }
+        if let onTapVal = subscript_(value, "onTap"),
+           onTapVal.isObject {
+            node.onTap = onTapVal
+        }
+        if let childrenVal = subscript_(value, "children"),
+           childrenVal.isArray {
+            let length = Int(childrenVal.objectForKeyedSubscript("length")?.toInt32() ?? 0)
+            node.children.reserveCapacity(length)
+            for i in 0..<length {
+                if let childVal = childrenVal.atIndex(i), childVal.isObject {
+                    node.children.append(parseValue(childVal))
+                }
+            }
+        }
+
         return node
+    }
+
+    private static func subscript_(_ value: JSValue, _ key: String) -> JSValue? {
+        guard let v = value.objectForKeyedSubscript(key),
+              !v.isUndefined, !v.isNull else { return nil }
+        return v
+    }
+
+    private static func string(_ value: JSValue, _ key: String) -> String? {
+        guard let v = subscript_(value, key), v.isString else { return nil }
+        return v.toString()
     }
 
     static func parseStyle(_ dict: [String: Any]) -> ViewStyle {

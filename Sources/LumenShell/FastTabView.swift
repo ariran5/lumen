@@ -19,9 +19,10 @@ struct FastTabView: UIViewRepresentable {
         v.backgroundColor = .systemBackground
         v.coordinator = context.coordinator
 
-        let renderer = Renderer(rootLayer: v.layer)
+        let renderer = Renderer(hostView: v)
         let engine = JSEngine()
         engine.installRenderBridge(renderer: renderer)
+        engine.installPlatformBridges()
 
         context.coordinator.engine = engine
         context.coordinator.renderer = renderer
