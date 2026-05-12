@@ -29,8 +29,10 @@ public struct BrowserView: View {
                         tab.pageTitle = name
                     })
                     .id(url.absoluteString)
+                    .ignoresSafeArea(edges: .bottom)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .animation(.easeInOut(duration: 0.15), value: tab.mode)
     }

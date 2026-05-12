@@ -40,7 +40,7 @@ final class LumenCell: UICollectionViewCell {
     func render(tree: RenderNode) {
         if renderer == nil {
             contentView.layer.masksToBounds = true
-            renderer = Renderer(rootLayer: contentView.layer)
+            renderer = Renderer(hostView: contentView)
         }
         renderer?.render(tree)
     }
