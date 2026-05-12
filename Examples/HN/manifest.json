@@ -1,0 +1,6 @@
+{
+  "name": "Hacker News",
+  "version": "0.0.1",
+  "entry": "/index.js",
+  "min_runtime": "0.1"
+}

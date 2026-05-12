@@ -16,4 +16,6 @@ struct ViewStyle {
     var textAlign: String = "left"
     var numberOfLines: Int = 0
     var lineHeight: Double = 0
+
+    var contentMode: String = "cover"
 }

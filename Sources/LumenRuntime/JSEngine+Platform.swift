@@ -33,6 +33,7 @@ extension JSEngine {
         installAlert()
         installHaptics()
         installTimers()
+        installFetchBridge()
     }
 
     private func installBottomSheet() {

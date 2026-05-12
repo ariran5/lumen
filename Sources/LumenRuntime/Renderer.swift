@@ -87,6 +87,9 @@ final class Renderer {
         if node.kind == .text, let textLayer = layer as? CATextLayer, let text = node.text {
             applyTextStyle(textLayer, text: text, style: node.style)
         }
+        if node.kind == .image, let src = node.source {
+            applyImage(layer: layer, source: src, style: node.style)
+        }
         if let onTap = node.onTap {
             tapHandlers[ObjectIdentifier(layer)] = onTap
         }
@@ -136,6 +139,29 @@ final class Renderer {
         }
         if style.borderRadius > 0 {
             layer.masksToBounds = true
+        }
+    }
+
+    private func applyImage(layer: CALayer, source: String, style: ViewStyle) {
+        switch style.contentMode {
+        case "cover":    layer.contentsGravity = .resizeAspectFill
+        case "contain":  layer.contentsGravity = .resizeAspect
+        case "stretch":  layer.contentsGravity = .resize
+        case "center":   layer.contentsGravity = .center
+        default:         layer.contentsGravity = .resizeAspectFill
+        }
+        layer.masksToBounds = true
+
+        guard let url = URL(string: source), let scheme = url.scheme,
+              ["http", "https"].contains(scheme.lowercased()) else { return }
+
+        let target = layer.bounds.size
+        ImageLoader.shared.loadImage(url: url, targetSize: target) { [weak layer] image in
+            guard let layer, let cgImage = image?.cgImage else { return }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            layer.contents = cgImage
+            CATransaction.commit()
         }
     }
 

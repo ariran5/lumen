@@ -11,6 +11,7 @@ struct RenderNode {
     var key: String?
     var style: ViewStyle = ViewStyle()
     var text: String?
+    var source: String?
     var onTap: JSValue?
     var children: [RenderNode] = []
 }
@@ -37,6 +38,9 @@ extension RenderNode {
         }
         if let text = string(value, "text") {
             node.text = text
+        }
+        if let src = string(value, "source") {
+            node.source = src
         }
         if let onTapVal = subscript_(value, "onTap"),
            onTapVal.isObject {
@@ -102,6 +106,8 @@ extension RenderNode {
         if let v = dict["textAlign"] as? String { style.textAlign = v }
         if let v = doubleValue(dict["numberOfLines"]) { style.numberOfLines = Int(v) }
         if let v = doubleValue(dict["lineHeight"]) { style.lineHeight = v }
+
+        if let v = dict["contentMode"] as? String { style.contentMode = v }
 
         return style
     }
