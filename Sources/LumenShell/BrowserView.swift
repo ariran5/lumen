@@ -65,6 +65,7 @@ private struct ProgressOverlay: View {
 private struct StartPage: View {
     @State private var showPlayground: Bool = UserDefaults.standard.bool(forKey: "playground")
     @State private var showFastDemo: Bool = UserDefaults.standard.bool(forKey: "demo")
+    @State private var showVirtualList: Bool = UserDefaults.standard.bool(forKey: "virtualList")
 
     var body: some View {
         VStack(spacing: 16) {
@@ -93,6 +94,14 @@ private struct StartPage: View {
                         .font(.callout)
                 }
                 .buttonStyle(.bordered)
+
+                Button {
+                    showVirtualList = true
+                } label: {
+                    Label("Virtual List 10k (M8 spike)", systemImage: "list.bullet.below.rectangle")
+                        .font(.callout)
+                }
+                .buttonStyle(.bordered)
             }
             .padding(.top, 8)
         }
@@ -103,6 +112,9 @@ private struct StartPage: View {
         }
         .sheet(isPresented: $showFastDemo) {
             DemoFastTabView()
+        }
+        .sheet(isPresented: $showVirtualList) {
+            VirtualListDemoView()
         }
     }
 }
