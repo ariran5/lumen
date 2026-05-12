@@ -15,7 +15,6 @@ final class Renderer {
     private(set) var lastRenderMs: Double = 0
 
     private var tapHandlers: [ObjectIdentifier: JSValue] = [:]
-    private var tapProxy: TapProxy?
 
     init(rootLayer: CALayer) {
         self.rootLayer = rootLayer
@@ -31,6 +30,15 @@ final class Renderer {
     func render(_ tree: RenderNode) {
         lastTree = tree
         relayout()
+    }
+
+    /// Stop the renderer from re-applying its last tree (used when something
+    /// else takes over the host view, e.g. lumen.virtualList mounts a
+    /// UICollectionView as a subview).
+    func detach() {
+        lastTree = nil
+        rootLayer.sublayers?.forEach { $0.removeFromSuperlayer() }
+        tapHandlers.removeAll(keepingCapacity: false)
     }
 
     func relayout() {
@@ -172,8 +180,17 @@ final class Renderer {
         let recognizer = UITapGestureRecognizer(target: proxy, action: #selector(TapProxy.handle(_:)))
         recognizer.cancelsTouchesInView = false
         host.addGestureRecognizer(recognizer)
-        self.tapProxy = proxy
+        // Keep proxy alive as long as the recognizer is alive. Without this,
+        // the proxy is released when Renderer is deinit'd while the recognizer
+        // is still attached to the host's view, and accessibility scans crash
+        // following the unowned target ref.
+        objc_setAssociatedObject(recognizer,
+                                  &Renderer.tapProxyKey,
+                                  proxy,
+                                  .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
+
+    private static var tapProxyKey: UInt8 = 0
 
     fileprivate func handleTap(at point: CGPoint) {
         guard !tapHandlers.isEmpty else { return }

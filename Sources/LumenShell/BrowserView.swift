@@ -17,20 +17,26 @@ public struct BrowserView: View {
             Divider()
 
             ZStack {
-                if tab.currentURL == nil {
-                    StartPage()
+                switch tab.mode {
+                case .start:
+                    StartPage(tab: tab)
                         .transition(.opacity)
-                } else {
+                case .web(let url):
                     WebTabView(tab: tab)
-                        .id(tab.currentURL?.host ?? "")
+                        .id(url.host ?? "")
+                case .fastApp(let url):
+                    FastAppHost(url: url, onBundleName: { name in
+                        tab.pageTitle = name
+                    })
+                    .id(url.absoluteString)
                 }
             }
         }
-        .animation(.easeInOut(duration: 0.15), value: tab.currentURL)
+        .animation(.easeInOut(duration: 0.15), value: tab.mode)
     }
 
     private func applyLaunchURLIfPresent() {
-        guard tab.currentURL == nil,
+        guard tab.mode == .start,
               let raw = UserDefaults.standard.string(forKey: "url") else { return }
         tab.addressInput = raw
         tab.commit()
@@ -63,82 +69,95 @@ private struct ProgressOverlay: View {
 }
 
 private struct StartPage: View {
+    @Bindable var tab: TabModel
+
     @State private var showPlayground: Bool = UserDefaults.standard.bool(forKey: "playground")
     @State private var showFastDemo: Bool = UserDefaults.standard.bool(forKey: "demo")
     @State private var showVirtualList: Bool = UserDefaults.standard.bool(forKey: "virtualList")
-    @State private var showRemoteApp: Bool = UserDefaults.standard.bool(forKey: "remote")
-    @State private var fastAppURL: String = UserDefaults.standard.string(forKey: "fastUrl") ?? "http://localhost:8080"
+
+    private let exampleApps: [(label: String, url: String)] = [
+        ("Hacker News", "http://localhost:8080"),
+    ]
 
     var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "globe.americas.fill")
-                .font(.system(size: 64))
-                .foregroundStyle(.tint)
-            Text("Lumen")
-                .font(.largeTitle.weight(.bold))
-            Text("Enter a URL above to begin")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+        ScrollView {
+            VStack(spacing: 16) {
+                Image(systemName: "globe.americas.fill")
+                    .font(.system(size: 64))
+                    .foregroundStyle(.tint)
+                    .padding(.top, 40)
+                Text("Lumen")
+                    .font(.largeTitle.weight(.bold))
+                Text("Type a URL above to open a site. If it ships a Lumen manifest, it opens as a fast-app.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
 
-            VStack(spacing: 8) {
-                Button {
-                    showPlayground = true
-                } label: {
-                    Label("JavaScript Playground", systemImage: "chevron.left.forwardslash.chevron.right")
-                        .font(.callout)
-                }
-                .buttonStyle(.bordered)
-
-                Button {
-                    showFastDemo = true
-                } label: {
-                    Label("Fast Tab Demo", systemImage: "square.grid.3x3.fill")
-                        .font(.callout)
-                }
-                .buttonStyle(.bordered)
-
-                Button {
-                    showVirtualList = true
-                } label: {
-                    Label("Virtual List 10k (M8 spike)", systemImage: "list.bullet.below.rectangle")
-                        .font(.callout)
-                }
-                .buttonStyle(.bordered)
-
-                Divider().padding(.vertical, 4)
-
-                VStack(spacing: 6) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "antenna.radiowaves.left.and.right")
-                            .font(.caption)
+                if !exampleApps.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Examples")
+                            .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
-                        TextField("http://localhost:8080", text: $fastAppURL)
-                            .textFieldStyle(.plain)
-                            .keyboardType(.URL)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .font(.system(.caption, design: .monospaced))
+                            .padding(.horizontal, 4)
+
+                        ForEach(exampleApps, id: \.label) { item in
+                            Button {
+                                tab.addressInput = item.url
+                                tab.commit()
+                            } label: {
+                                HStack {
+                                    Image(systemName: "bolt.fill")
+                                        .foregroundStyle(.tint)
+                                    Text(item.label)
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    Text(item.url)
+                                        .font(.system(.caption, design: .monospaced))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 12)
+                                .background(Color(uiColor: .secondarySystemBackground),
+                                            in: RoundedRectangle(cornerRadius: 10))
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Color(uiColor: .secondarySystemBackground),
-                                in: RoundedRectangle(cornerRadius: 8))
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+                }
+
+                VStack(spacing: 8) {
+                    Button {
+                        showPlayground = true
+                    } label: {
+                        Label("JavaScript Playground", systemImage: "chevron.left.forwardslash.chevron.right")
+                            .font(.callout)
+                    }
+                    .buttonStyle(.bordered)
 
                     Button {
-                        showRemoteApp = true
+                        showFastDemo = true
                     } label: {
-                        Label("Load fast-app from URL", systemImage: "arrow.down.circle.fill")
-                            .font(.callout.weight(.medium))
-                            .frame(maxWidth: .infinity)
+                        Label("Fast Tab Demo (inline JS)", systemImage: "square.grid.3x3.fill")
+                            .font(.callout)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(URL(string: fastAppURL) == nil)
+                    .buttonStyle(.bordered)
+
+                    Button {
+                        showVirtualList = true
+                    } label: {
+                        Label("Virtual List 10k", systemImage: "list.bullet.below.rectangle")
+                            .font(.callout)
+                    }
+                    .buttonStyle(.bordered)
                 }
+                .padding(.top, 16)
             }
-            .padding(.top, 8)
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 40)
         }
-        .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .sheet(isPresented: $showPlayground) {
             JSPlaygroundView()
         }
@@ -147,11 +166,6 @@ private struct StartPage: View {
         }
         .sheet(isPresented: $showVirtualList) {
             VirtualListDemoView()
-        }
-        .sheet(isPresented: $showRemoteApp) {
-            if let url = URL(string: fastAppURL) {
-                RemoteFastAppView(url: url)
-            }
         }
     }
 }

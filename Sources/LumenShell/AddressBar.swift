@@ -11,40 +11,61 @@ struct AddressBar: View {
         return "magnifyingglass"
     }
 
+    private var isFastApp: Bool {
+        if case .fastApp = tab.mode { return true }
+        return false
+    }
+
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: leadingIcon)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 16)
+            HStack(spacing: 8) {
+                Image(systemName: leadingIcon)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(isFastApp ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                    .frame(width: 16)
 
-            TextField("Search or enter address", text: $tab.addressInput)
-                .textFieldStyle(.plain)
-                .keyboardType(.URL)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .submitLabel(.go)
-                .focused($isFocused)
-                .onSubmit {
-                    tab.commit()
-                    isFocused = false
+                TextField("Search or enter address", text: $tab.addressInput)
+                    .textFieldStyle(.plain)
+                    .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.go)
+                    .focused($isFocused)
+                    .onSubmit {
+                        tab.commit()
+                        isFocused = false
+                    }
+
+                if !tab.addressInput.isEmpty, isFocused {
+                    Button {
+                        tab.addressInput = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
                 }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color(uiColor: .secondarySystemBackground))
+            )
 
-            if !tab.addressInput.isEmpty, isFocused {
+            if tab.mode != .start {
                 Button {
-                    tab.addressInput = ""
+                    tab.goHome()
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
+                    Image(systemName: "house.fill")
+                        .font(.system(size: 16))
                         .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
                 }
                 .buttonStyle(.plain)
+                .transition(.opacity.combined(with: .scale))
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color(uiColor: .secondarySystemBackground))
-        )
+        .animation(.easeInOut(duration: 0.15), value: tab.mode)
     }
 }

@@ -47,7 +47,7 @@ struct WebTabView: UIViewRepresentable {
             tab.canGoBack = webView.canGoBack
             tab.canGoForward = webView.canGoForward
             if let url = webView.url, url != tab.currentURL {
-                tab.currentURL = url
+                tab.mode = .web(url)
                 tab.addressInput = url.absoluteString
             }
         }

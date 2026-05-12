@@ -1,20 +1,54 @@
 import Foundation
 import Observation
 
+enum TabMode: Equatable {
+    case start
+    case web(URL)
+    case fastApp(URL)
+}
+
 @MainActor
 @Observable
 final class TabModel {
     var addressInput: String = ""
-    var currentURL: URL?
+    var mode: TabMode = .start
     var isLoading: Bool = false
     var pageTitle: String = ""
     var canGoBack: Bool = false
     var canGoForward: Bool = false
 
+    var currentURL: URL? {
+        switch mode {
+        case .start: return nil
+        case .web(let url), .fastApp(let url): return url
+        }
+    }
+
     func commit() {
+        let trimmed = addressInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            mode = .start
+            return
+        }
         guard let url = Self.normalize(addressInput) else { return }
-        currentURL = url
         addressInput = url.absoluteString
+
+        Task {
+            let detection = await BundleLoader.probe(url: url)
+            await MainActor.run {
+                switch detection {
+                case .fastApp:
+                    self.mode = .fastApp(url)
+                case .web:
+                    self.mode = .web(url)
+                }
+            }
+        }
+    }
+
+    func goHome() {
+        mode = .start
+        addressInput = ""
     }
 
     static func normalize(_ raw: String) -> URL? {

@@ -41,7 +41,29 @@ enum BundleLoadError: LocalizedError {
     }
 }
 
+enum BundleProbe: Sendable {
+    case fastApp
+    case web
+}
+
 enum BundleLoader {
+    static func probe(url: URL) async -> BundleProbe {
+        let manifestURL = url.appendingPathComponent(".well-known/lumen.json")
+        var req = URLRequest(url: manifestURL)
+        req.timeoutInterval = 3
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: req)
+            guard let http = response as? HTTPURLResponse,
+                  (200..<300).contains(http.statusCode) else { return .web }
+            guard (try? JSONDecoder().decode(LumenManifest.self, from: data)) != nil else { return .web }
+            return .fastApp
+        } catch {
+            return .web
+        }
+    }
+
     static func load(from root: URL) async throws -> LumenBundle {
         let manifestURL = root.appendingPathComponent(".well-known/lumen.json")
         var req = URLRequest(url: manifestURL)
