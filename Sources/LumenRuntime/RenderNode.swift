@@ -10,6 +10,7 @@ struct RenderNode {
     var kind: Kind = .view
     var key: String?
     var style: ViewStyle = ViewStyle()
+    var text: String?
     var children: [RenderNode] = []
 }
 
@@ -30,6 +31,9 @@ extension RenderNode {
         }
         if let style = dict["style"] as? [String: Any] {
             node.style = parseStyle(style)
+        }
+        if let text = dict["text"] as? String {
+            node.text = text
         }
         if let children = dict["children"] as? [Any] {
             node.children = children.compactMap { item -> RenderNode? in
@@ -67,6 +71,14 @@ extension RenderNode {
         if let v = doubleValue(dict["borderRadius"]) { style.borderRadius = v }
         if let v = doubleValue(dict["borderWidth"]) { style.borderWidth = v }
         if let v = doubleValue(dict["opacity"]) { style.opacity = v }
+
+        if let v = doubleValue(dict["fontSize"]) { style.fontSize = v }
+        if let v = dict["fontWeight"] { style.fontWeight = String(describing: v) }
+        if let v = dict["fontFamily"] as? String { style.fontFamily = v }
+        if let v = dict["color"] as? String { style.color = parseColor(v) }
+        if let v = dict["textAlign"] as? String { style.textAlign = v }
+        if let v = doubleValue(dict["numberOfLines"]) { style.numberOfLines = Int(v) }
+        if let v = doubleValue(dict["lineHeight"]) { style.lineHeight = v }
 
         return style
     }

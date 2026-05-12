@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import QuartzCore
+import UIKit
 
 @MainActor
 final class Renderer {
@@ -45,6 +46,12 @@ final class Renderer {
 
     private func buildFlex(_ node: RenderNode) -> FlexNode {
         let f = FlexNode(style: node.style.flex)
+        if node.kind == .text, let text = node.text {
+            let style = node.style
+            f.measure = { available in
+                TextMeasure.measure(text: text, style: style, maxWidth: available.width)
+            }
+        }
         for child in node.children {
             f.add(buildFlex(child))
         }
@@ -56,7 +63,7 @@ final class Renderer {
                        parent: CALayer,
                        parentOrigin: CGPoint,
                        counter: inout Int) {
-        let layer = CALayer()
+        let layer = makeLayer(for: node)
         layer.frame = CGRect(
             x: flex.frame.minX - parentOrigin.x,
             y: flex.frame.minY - parentOrigin.y,
@@ -64,12 +71,42 @@ final class Renderer {
             height: flex.frame.height
         )
         applyVisualStyle(layer, style: node.style)
+        if node.kind == .text, let textLayer = layer as? CATextLayer, let text = node.text {
+            applyTextStyle(textLayer, text: text, style: node.style)
+        }
         parent.addSublayer(layer)
         counter += 1
 
         let myOrigin = CGPoint(x: flex.frame.minX, y: flex.frame.minY)
         for (cn, cf) in zip(node.children, flex.children) {
             mount(node: cn, flex: cf, parent: layer, parentOrigin: myOrigin, counter: &counter)
+        }
+    }
+
+    private func makeLayer(for node: RenderNode) -> CALayer {
+        switch node.kind {
+        case .text:
+            let layer = CATextLayer()
+            layer.contentsScale = UIScreen.main.scale
+            return layer
+        default:
+            return CALayer()
+        }
+    }
+
+    private func applyTextStyle(_ layer: CATextLayer, text: String, style: ViewStyle) {
+        layer.string = TextMeasure.attributedString(text, style: style)
+        layer.isWrapped = true
+        layer.truncationMode = .end
+        layer.alignmentMode = textAlignmentMode(style.textAlign)
+    }
+
+    private func textAlignmentMode(_ s: String) -> CATextLayerAlignmentMode {
+        switch s {
+        case "center":  return .center
+        case "right":   return .right
+        case "justify": return .justified
+        default:        return .left
         }
     }
 

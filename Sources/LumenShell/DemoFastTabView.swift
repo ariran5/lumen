@@ -1,6 +1,6 @@
 import SwiftUI
 
-private let demoScript = """
+private let demoScript = #"""
 function color(i, total) {
   const t = i / total;
   const r = Math.round(127 + 127 * Math.sin(t * 6.28));
@@ -12,25 +12,15 @@ function color(i, total) {
 function tile(i, total) {
   return {
     type: 'view',
-    style: {
-      width: 32,
-      height: 32,
-      backgroundColor: color(i, total),
-      borderRadius: 8
-    }
+    style: { width: 32, height: 32, backgroundColor: color(i, total), borderRadius: 8 }
   };
 }
 
-const COLS = 10;
-const ROWS = 10;
-const total = COLS * ROWS;
-
+const COLS = 10, ROWS = 10, total = COLS * ROWS;
 const rows = [];
 for (let r = 0; r < ROWS; r++) {
   const cells = [];
-  for (let c = 0; c < COLS; c++) {
-    cells.push(tile(r * COLS + c, total));
-  }
+  for (let c = 0; c < COLS; c++) cells.push(tile(r * COLS + c, total));
   rows.push({
     type: 'view',
     style: { flexDirection: 'row', gap: 4, height: 32 },
@@ -38,20 +28,56 @@ for (let r = 0; r < ROWS; r++) {
   });
 }
 
-const tree = {
-  type: 'view',
+const title = {
+  type: 'text',
+  text: 'Lumen Fast Tab',
   style: {
-    padding: 16,
-    gap: 4,
-    backgroundColor: '#0F0F12'
-  },
-  children: rows
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    height: 36,
+  }
 };
 
-console.log('rendering', total, 'tiles');
+const subtitle = {
+  type: 'text',
+  text: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate.',
+  style: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    numberOfLines: 3,
+    lineHeight: 18,
+    height: 56,
+  }
+};
+
+const caption = {
+  type: 'text',
+  text: '100 CALayer tiles · zero web stack',
+  style: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#6EE7B7',
+    textAlign: 'center',
+    height: 16,
+  }
+};
+
+const tree = {
+  type: 'view',
+  style: { padding: 20, gap: 14, backgroundColor: '#0F0F12', flex: 1 },
+  children: [
+    title,
+    subtitle,
+    ...rows,
+    caption
+  ]
+};
+
+console.log('rendering', total, 'tiles +', 3, 'text nodes');
 lumen.render(tree);
-console.log('done')
-"""
+console.log('done');
+"""#
 
 struct DemoFastTabView: View {
     @State private var layerCount: Int = 0
@@ -68,7 +94,7 @@ struct DemoFastTabView: View {
 
                 metricsBar
             }
-            .navigationTitle("Fast Tab: 100 tiles")
+            .navigationTitle("Fast Tab")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
