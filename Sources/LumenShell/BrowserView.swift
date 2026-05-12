@@ -64,6 +64,7 @@ private struct ProgressOverlay: View {
 
 private struct StartPage: View {
     @State private var showPlayground: Bool = UserDefaults.standard.bool(forKey: "playground")
+    @State private var showFastDemo: Bool = UserDefaults.standard.bool(forKey: "demo")
 
     var body: some View {
         VStack(spacing: 16) {
@@ -76,19 +77,32 @@ private struct StartPage: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            Button {
-                showPlayground = true
-            } label: {
-                Label("JavaScript Playground", systemImage: "chevron.left.forwardslash.chevron.right")
-                    .font(.callout)
+            VStack(spacing: 8) {
+                Button {
+                    showPlayground = true
+                } label: {
+                    Label("JavaScript Playground", systemImage: "chevron.left.forwardslash.chevron.right")
+                        .font(.callout)
+                }
+                .buttonStyle(.bordered)
+
+                Button {
+                    showFastDemo = true
+                } label: {
+                    Label("Fast Tab Demo", systemImage: "square.grid.3x3.fill")
+                        .font(.callout)
+                }
+                .buttonStyle(.bordered)
             }
-            .buttonStyle(.bordered)
             .padding(.top, 8)
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .sheet(isPresented: $showPlayground) {
             JSPlaygroundView()
+        }
+        .sheet(isPresented: $showFastDemo) {
+            DemoFastTabView()
         }
     }
 }
