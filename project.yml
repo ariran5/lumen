@@ -37,3 +37,17 @@ targets:
         INFOPLIST_KEY_NSAppTransportSecurity: ""
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_PREVIEWS: YES
+
+  LumenTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+        optional: true
+    dependencies:
+      - target: Lumen
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lumen.browser.tests
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+        GENERATE_INFOPLIST_FILE: YES
