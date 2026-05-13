@@ -21,6 +21,8 @@ const isRefreshing = signal(false)
 const notifStatus = signal<string>('—')
 const lastTapped = signal<string>('—')
 const incomingURL = signal<string>('—')
+const pickedDocs = signal<PickedDocument[]>([])
+const docPreview = signal<string>('')
 let wsHandle: WebSocketHandle | null = null
 
 // Подписки на push-каналы native'а. Регистрируем один раз — handle'ы живут
@@ -69,6 +71,7 @@ function App() {
       ActionSheetCard(),
       SecureStorageCard(),
       ImagePickerCard(),
+      DocumentPickerCard(),
       WebSocketCard(),
       View({height: lumen.safeArea.bottom + 16}),
     ),
@@ -458,6 +461,128 @@ function ImagePickerCard() {
       const asset = Array.isArray(r) ? r[0] : r
       pickedAsset.value = asset
     }),
+  )
+}
+
+// ── 6b. DocumentPicker ────────────────────────────────────────────────
+//
+// UIDocumentPicker — выбор из Files.app / iCloud Drive / Dropbox-like
+// провайдеров. `asCopy: true` — файл копируется в наш sandbox, отдаём
+// fastapp'у local file:// uri (как imagePicker). Дальше `fetch(uri)`
+// читает содержимое — URLSession поддерживает file:// схему прозрачно.
+
+function isImage(mime: string | undefined): boolean {
+  return !!mime && mime.startsWith('image/')
+}
+
+function isTextual(mime: string | undefined, name: string): boolean {
+  if (mime && (mime.startsWith('text/') ||
+               mime === 'application/json' ||
+               mime === 'application/xml' ||
+               mime === 'application/javascript')) return true
+  // Эвристика по расширению — UTType для md/log/ts/etc даёт public.* без mime.
+  const ext = name.split('.').pop()?.toLowerCase() ?? ''
+  return ['md', 'txt', 'log', 'ts', 'tsx', 'js', 'jsx', 'json', 'xml',
+          'yml', 'yaml', 'html', 'css', 'csv', 'srt'].includes(ext)
+}
+
+async function loadPreview(doc: PickedDocument): Promise<void> {
+  docPreview.value = ''
+  if (isImage(doc.mime)) return  // картинку рендерим напрямую через Image
+  if (isTextual(doc.mime, doc.name)) {
+    try {
+      const r = await fetch(doc.uri)
+      const text = await r.text()
+      docPreview.value = text.length > 800 ? text.slice(0, 800) + '\n…' : text
+    } catch (e) {
+      docPreview.value = `fetch failed: ${String(e)}`
+    }
+    return
+  }
+  // Бинарное (pdf/zip/audio/etc) — читаем через arrayBuffer и показываем
+  // hex первых 32 байт. Доказательство что bytes действительно у нас в JS.
+  try {
+    const r = await fetch(doc.uri)
+    const buf = await r.arrayBuffer()
+    const view = new Uint8Array(buf)
+    const head = Array.from(view.slice(0, 32))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join(' ')
+    docPreview.value = `(binary · ${doc.mime ?? 'unknown'} · ${buf.byteLength} bytes)\nfirst 32 bytes:\n${head}`
+  } catch (e) {
+    docPreview.value = `arrayBuffer failed: ${String(e)}`
+  }
+}
+
+function DocumentPickerCard() {
+  return Card('DOCUMENTS',
+    () => {
+      const ds = pickedDocs.value
+      if (ds.length === 0) return 'tap to pick'
+      if (ds.length === 1) return `picked: ${ds[0].name} · ${ds[0].size}b`
+      return `picked ${ds.length} files`
+    },
+    // Список выбранных (compact, до 5 строк).
+    Slot({gap: 3}, () => {
+      const ds = pickedDocs.value
+      if (ds.length === 0) return null
+      return ds.slice(0, 5).map((d, i) =>
+        Text({
+          fontSize: 11, color: COLORS.textDim, fontFamily: 'Menlo',
+          key: `${i}-${d.name}`,
+        }, `• ${d.name}  ${d.size}b  ${d.mime ?? '?'}`))
+    }),
+    // Preview-блок — фиксированной высоты, содержимое первого файла.
+    Slot({
+      backgroundColor: '#0B0B0F',
+      borderColor: COLORS.border, borderWidth: 1,
+      borderRadius: 8,
+      padding: 10,
+      minHeight: 160,
+      alignItems: 'center', justifyContent: 'center',
+    }, () => {
+      const ds = pickedDocs.value
+      if (ds.length === 0) {
+        return Text({fontSize: 11, color: COLORS.textMuted}, '(no file picked)')
+      }
+      const first = ds[0]
+      if (isImage(first.mime)) {
+        return Image({
+          source: first.uri,
+          width: 140, height: 140, borderRadius: 8,
+          contentMode: 'cover',
+        })
+      }
+      const body = docPreview.value
+      if (!body) {
+        return Text({fontSize: 11, color: COLORS.textMuted}, 'loading…')
+      }
+      return Text({
+        fontSize: 11, color: COLORS.textDim,
+        fontFamily: 'Menlo',
+      }, body)
+    }),
+    Row(
+      View({flex: 1},
+        PrimaryButton('Pick any file', async () => {
+          const r = await lumen.documentPicker.pick()
+          if (!r) { pickedDocs.value = []; docPreview.value = ''; return }
+          pickedDocs.value = r
+          await loadPreview(r[0])
+        }),
+      ),
+      View({flex: 1},
+        SecondaryButton('Pick multi (pdf+img)', async () => {
+          const r = await lumen.documentPicker.pick({
+            types: ['pdf', 'image'],
+            multiple: true,
+          })
+          if (!r) { pickedDocs.value = []; docPreview.value = ''; return }
+          pickedDocs.value = r
+          await loadPreview(r[0])
+        }),
+      ),
+    ),
   )
 }
 

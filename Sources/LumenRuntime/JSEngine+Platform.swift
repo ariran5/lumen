@@ -41,6 +41,7 @@ extension JSEngine {
         installLinkingBridge()
         installShareBridge()
         installImagePickerBridge()
+        installDocumentPickerBridge()
         installWebSocketBridge()
         installBenchBridge()
         installAnimationBridge()
