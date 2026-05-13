@@ -88,11 +88,12 @@ extension JSEngine {
             }
 
         case "text":
-            if value.isString, let s = value.toString(),
-               let textLayer = layer as? CATextLayer {
-                textLayer.string = TextMeasure.attributedString(s, style: mount.node.style)
-                // Update model so subsequent reconciles don't fight the patch
-                mount.node.text = s
+            if value.isString, let s = value.toString() {
+                // Делегируем Renderer.patchText: обновляет lastTree + relayout.
+                // RenderNode — struct, поэтому просто менять mount.node.text
+                // недостаточно — следующий reconcile откатит layer на старый
+                // текст из lastTree.
+                ref.renderer?.patchText(id: id, text: s)
             }
 
         case "color":

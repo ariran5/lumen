@@ -132,7 +132,10 @@ enum CoreFramework {
         autocapitalize: 1, autocorrect: 1, secure: 1,
         onChange: 1, onSubmit: 1, onFocus: 1, onBlur: 1,
         intensity: 1, variant: 1,
-        onScroll: 1
+        onScroll: 1,
+        // map-specific
+        region: 1, pins: 1, mapType: 1,
+        onRegionChange: 1, onPinTap: 1,
       }
       const GESTURE_PROPS = [
         'onTap', 'onDoubleTap', 'onLongPress',
@@ -353,6 +356,28 @@ enum CoreFramework {
         return node
       }
 
+      // MapView(props) — нативная MKMapView обёртка. region/pins/mapType
+      // — обычные props (можно делать реактивными через thunks как и стиль).
+      // onRegionChange / onPinTap — handler'ы.
+      function MapView(props) {
+        const p = props || {}
+        const sb = splitStyle(p)
+        const node = {
+          type: 'map',
+          id: nextId(),
+          style: sb.style,
+          region: p.region || null,
+          pins: Array.isArray(p.pins) ? p.pins : [],
+          mapType: typeof p.mapType === 'string' ? p.mapType : 'standard',
+          children: [],
+        }
+        if (sb.bindings) node.bindings = sb.bindings
+        if (typeof p.onRegionChange === 'function') node.onRegionChange = p.onRegionChange
+        if (typeof p.onPinTap === 'function') node.onPinTap = p.onPinTap
+        if (p.key !== undefined) node.key = String(p.key)
+        return node
+      }
+
       // Slot(props, thunk) — реактивный flex-контейнер. thunk возвращает
       // либо одиночный RenderNode, либо массив, либо null/undefined.
       // Когда сигналы внутри thunk'а меняются, native пересоберёт ТОЛЬКО
@@ -478,6 +503,51 @@ enum CoreFramework {
         _saR.value = r
       }
 
+      // ─────────── app lifecycle ───────────
+      // Native пушит state через lumen._updateAppState(state). Чтение
+      // `lumen.appState` из thunk-prop'а делает узел подписчиком, фастапп
+      // перерисуется при transition'е foreground↔background.
+      const _appState = signal(typeof lumen._appStateInitial === 'string'
+                               ? lumen._appStateInitial : 'active')
+      Object.defineProperty(lumen, 'appState', {
+        get: function () { return _appState.value },
+        configurable: false
+      })
+      lumen._updateAppState = function (s) { _appState.value = String(s) }
+
+      // ─────────── appearance ───────────
+      // lumen.appearance.theme → 'dark' | 'light'. Реактивно — UITraitChange
+      // observer на UIWindowScene фаерит при смене системной темы.
+      const _theme = signal(typeof lumen._themeInitial === 'string'
+                            ? lumen._themeInitial : 'light')
+      Object.defineProperty(lumen, 'appearance', {
+        value: Object.freeze({
+          get theme() { return _theme.value },
+        }),
+        writable: false, configurable: false
+      })
+      lumen._updateTheme = function (t) { _theme.value = String(t) }
+
+      // ─────────── network ───────────
+      // lumen.network.{online, type}. NWPathMonitor пушит обновления;
+      // первый pathUpdate приходит сразу после .start, поэтому initial
+      // ('unknown') живёт миллисекунды.
+      const _netOnline = signal(typeof lumen._networkOnlineInitial === 'boolean'
+                                ? lumen._networkOnlineInitial : true)
+      const _netType = signal(typeof lumen._networkTypeInitial === 'string'
+                              ? lumen._networkTypeInitial : 'unknown')
+      Object.defineProperty(lumen, 'network', {
+        value: Object.freeze({
+          get online() { return _netOnline.value },
+          get type()   { return _netType.value },
+        }),
+        writable: false, configurable: false
+      })
+      lumen._updateNetwork = function (online, type) {
+        _netOnline.value = !!online
+        _netType.value = String(type)
+      }
+
       // ─────────── tabs ───────────
       // Native bridge выдаёт JSON-строки (Swift 6 Sendable не пропускает
       // объекты как return type). Здесь оборачиваем в человеческий API.
@@ -485,12 +555,13 @@ enum CoreFramework {
         const raw = lumen._tabsRaw
         const parse = function (s) { return (s === 'null' || s == null) ? null : JSON.parse(s) }
         lumen.tabs = {
-          list:    function ()    { return parse(raw._listJSON()) || [] },
-          current: function ()    { return parse(raw._currentJSON()) },
-          own:     function ()    { return parse(raw._ownJSON()) },
-          open:    function (url) { return raw.open(url == null ? null : String(url)) },
-          close:   function (id)  { raw.close(id == null ? null : String(id)) },
-          switch:  function (id)  { raw['switch'](String(id)) },
+          list:     function ()    { return parse(raw._listJSON()) || [] },
+          current:  function ()    { return parse(raw._currentJSON()) },
+          own:      function ()    { return parse(raw._ownJSON()) },
+          open:     function (url) { return raw.open(url == null ? null : String(url)) },
+          navigate: function (url) { if (url != null) raw.navigate(String(url)) },
+          close:    function (id)  { raw.close(id == null ? null : String(id)) },
+          switch:   function (id)  { raw['switch'](String(id)) },
           // Push-канал 'tabs': TabsStore через withObservationTracking
           // фаерит на любое изменение списка/активной/title/loading/URL.
           subscribe: function (fn) {
@@ -628,6 +699,7 @@ enum CoreFramework {
         TextInput: TextInput, ScrollView: ScrollView,
         Blur: Blur, Glass: Glass,
         Slot: Slot,
+        MapView: MapView,
         mount: mount, animated: animated
       }
 
@@ -645,6 +717,7 @@ enum CoreFramework {
       globalThis.Blur = Blur
       globalThis.Glass = Glass
       globalThis.Slot = Slot
+      globalThis.MapView = MapView
       globalThis.mount = mount
       globalThis.animated = animated
 

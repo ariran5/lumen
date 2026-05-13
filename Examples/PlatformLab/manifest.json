@@ -1,0 +1,7 @@
+{
+  "name": "Platform Lab",
+  "version": "0.0.1",
+  "entry": "/index.ts",
+  "min_runtime": "0.1",
+  "dev": true
+}

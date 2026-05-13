@@ -1,0 +1,96 @@
+# Lumen — Platform Tier 1 (Phase 6)
+
+Цель: дать fast-app'ам набор device-API без которого "хорошее приложение" не построишь. После закрытия — можно писать заметки, чат, профиль, любой контент-апп.
+
+Подход: один заход, все 7 фич в одну сессию. Каждая ≤ ~80 строк Swift + JS-обёртка через `lumen.*`. Pattern уже устоявшийся (`JSEngine+*.swift` + `installFooBridge()` в `installPlatformBridges()`).
+
+## Скоп
+
+| # | API | Реализация | Сложность |
+|---|---|---|---|
+| 1 | `lumen.clipboard.{copy,paste,has}` | UIPasteboard.general | trivial |
+| 2 | `lumen.linking.{open,canOpen}` | UIApplication.shared.open | trivial |
+| 3 | `lumen.share({text,url})` | UIActivityViewController | small |
+| 4 | `lumen.actionSheet({title,actions,onSelect})` | UIAlertController.actionSheet | small |
+| 5 | `lumen.secureStorage.{get,set,remove}` | Security/SecItem | medium |
+| 6 | `lumen.imagePicker.pick({source})` → `Promise<{uri,w,h}>` | PHPickerViewController, copy → tmp file | medium |
+| 7 | `lumen.ws(url, {onOpen,onMessage,onClose,onError})` | URLSessionWebSocketTask | medium |
+
+## Соглашения API
+
+- **Promise-based для async** (image picker). Pattern из fetch: native принимает `(resolve, reject) -> Void`, JS обёртка строит Promise.
+- **Callback-based для streams** (websocket). Возвращает handle с `send/close`.
+- **Sync для простых** (clipboard, secure storage get) — `@convention(block) (String?) -> String?`.
+- **UI-presentation** (share, action sheet, image picker) — через `TopViewController.find()`.
+- **Permissions inline в JS** — если iOS просит permission, system prompt; ошибки рейзятся как reject в Promise или onError callback.
+
+## Acceptance
+
+- Все 7 API доступны как `lumen.*`
+- В `packages/lumen-types/index.d.ts` есть типы
+- `Examples/PlatformLab` использует каждое и показывает рабочий результат на симуляторе
+- ROADMAP.md обновлён Phase 6 closure
+
+## Что НЕ входит (отложено)
+
+- Camera capture (отдельно от picker) — Tier 3
+- Document picker (Files app) — Tier 3
+- Audio/Video — Tier 3
+
+---
+
+# Tier 2 — Phase 9
+
+Следующий заход. Без этого нельзя сделать "серьёзный" app (не demo).
+
+## Скоп
+
+| # | API | Реализация | Сложность |
+|---|---|---|---|
+| 1 | `lumen.appState` reactive (`'active'\|'background'\|'inactive'`) | UIApplication.willResignActive/didBecomeActive → NativeNotifier → signal | small |
+| 2 | `lumen.appearance.theme` reactive (`'dark'\|'light'`) | UITraitCollection.userInterfaceStyle observer | small |
+| 3 | `lumen.network.{online, type}` reactive | NWPathMonitor → NativeNotifier | small |
+| 4 | `lumen.biometrics.authenticate(reason) → Promise<bool>` | LAContext.evaluatePolicy | small |
+| 5 | `lumen.biometrics.available() → 'faceID'\|'touchID'\|'none'` | LAContext.canEvaluatePolicy | trivial |
+| 6 | Pull-to-refresh на ScrollView (`onRefresh`, `refreshing` props) | UIRefreshControl на LumenScrollView | medium |
+| 7 | `lumen.statusBar.style({theme, hidden})` | preferredStatusBarStyle override через UIViewController | small |
+| 8 | `lumen.notifications.schedule({title, body, at}) → id` (local only) | UNUserNotificationCenter — request, add | medium |
+| 9 | `lumen.notifications.requestPermission() → Promise<'granted'\|'denied'>` | UNUserNotificationCenter.requestAuthorization | small |
+| 10 | `lumen.notifications.onTap.subscribe(fn)` | UNUserNotificationCenterDelegate didReceive | medium |
+| 11 | Deep links — incoming URL → `lumen.linking.onIncoming.subscribe(fn)` | scene/app delegate openURLContexts → NativeNotifier | medium |
+
+## Группировка по подзаходам
+
+**Заход A — reactive signals (1-3):** lifecycle + theme + network. Все три читаются как signal'ы, инфра `NativeNotifier` готова, делается одним коммитом. ~150 LOC, ~3 файла. ✓ **закрыт (2026-05-13)** — JSEngine+{Lifecycle,Appearance,Network}.swift; signal-backed getters в CoreFramework; PlatformLab карточки AppState/Theme/Network реактивно обновляются.
+
+**Заход B — biometrics + pull-to-refresh + status bar (4-7):** UX-апгрейд для типичных app'ов. Не блокеры друг друга, но размер сопоставимый. ~250 LOC.
+
+**Заход C — local notifications + deep links (8-11):** Отдельный коммит — нужно дёрнуть AppDelegate/SceneDelegate, плюс UN-permission диалог. APNS (remote push) **отложен до Tier 2.5** — требует capabilities + entitlements + dev-сертификат, отдельная инфра-возня.
+
+## Acceptance
+
+- Tier 2 Lab — `Examples/Tier2Lab/` (или расширить PlatformLab) — карточка per API
+- Type definitions в `packages/lumen-types/index.d.ts`
+- ROADMAP.md обновлён P9 closure
+- E2E проверено на iPhone
+
+## Рекомендуемая последовательность
+
+A → B → C. После A появляется реактивный системный context, который дальше использует всё остальное (например biometrics диалог проверяет theme, и т.п.). C последним потому что инфра-зависимостей больше (entitlements/delegates).
+
+---
+
+# Tier 3 (на потом)
+
+Не блокеры реального продакшена, но добавляют классы приложений:
+
+- **Camera capture** (отдельно от picker) — для сканеров/QR. `AVCaptureSession` или `UIImagePickerController(camera)`. Требует `NSCameraUsageDescription`.
+- **Document picker** — `UIDocumentPickerViewController`. Files app, iCloud Drive, sharing с другими app'ами.
+- **Audio player** — `AVAudioPlayer` через `lumen.audio.play(uri)`. Recorder — `AVAudioRecorder`.
+- **Video player** — `<Video src=…/>` primitive поверх `AVPlayerLayer`.
+- **Sensors** — `CMMotionManager` (gyro / accelerometer / motion). Для AR/игр.
+- **HealthKit** — `HKHealthStore`. Узкий сегмент, но без альтернативы.
+- **Bluetooth/BLE** — `CBCentralManager`.
+- **In-App Purchase** — `StoreKit 2`. Required для платных fast-app'ов.
+- **Sign in with Apple** — `ASAuthorizationController`. Иногда обязателен по App Store guidelines.
+- **Mail/SMS/Phone composers** — `MFMailComposeViewController` / `MFMessageComposeViewController` / `tel:` через linking уже работает.

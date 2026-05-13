@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import JavaScriptCore
+import MapKit
 import QuartzCore
 import UIKit
 
@@ -28,6 +29,9 @@ final class MountedNode {
 
     // blur overlay: UIVisualEffectView с nested Renderer'ом внутри contentView.
     var blurView: LumenBlurView?
+
+    // map overlay: MKMapView с региону/пинами/событиями.
+    var mapView: LumenMapView?
 
     init(node: RenderNode, layer: CALayer) {
         self.node = node
@@ -108,6 +112,31 @@ final class Renderer {
             onAfterLayout?()
             flushDisposalBuffer()
         }
+    }
+
+    /// Обновляет текст узла id в lastTree + запускает relayout. Без этого
+    /// patch только меняет CATextLayer.string, оставляя старый frame —
+    /// длинный новый текст обрезается по старому intrinsic.
+    func patchText(id: Int, text: String) {
+        guard var tree = lastTree else { return }
+        if Self.mutateText(&tree, id: id, text: text) {
+            lastTree = tree
+            relayout()
+            onAfterLayout?()
+        }
+    }
+
+    private static func mutateText(_ node: inout RenderNode, id: Int, text: String) -> Bool {
+        if node.id == id {
+            node.text = text
+            return true
+        }
+        for i in 0..<node.children.count {
+            if mutateText(&node.children[i], id: id, text: text) {
+                return true
+            }
+        }
+        return false
     }
 
     private func flushDisposalBuffer() {
@@ -253,6 +282,11 @@ final class Renderer {
             return mount
         }
 
+        if node.kind == .map {
+            mountMap(mount: mount, node: node, flex: flex)
+            return mount
+        }
+
         let myOrigin = CGPoint(x: flex.frame.minX, y: flex.frame.minY)
         for (cn, cf) in zip(node.children, flex.children) {
             let cm = mountFresh(parent: layer,
@@ -285,6 +319,28 @@ final class Renderer {
         host.addSubview(sv)
         sv.renderContent(children: node.children, wrapperStyle: node.style)
         mount.scrollView = sv
+    }
+
+    private func mountMap(mount: MountedNode, node: RenderNode, flex: FlexNode) {
+        guard let host = hostView else { return }
+        let mv = LumenMapView(frame: flex.frame)
+        mv.onRegionChange = node.onMapRegionChange
+        mv.onPinTap = node.onMapPinTap
+        mv.layer.cornerRadius = CGFloat(node.style.borderRadius)
+        mv.layer.masksToBounds = node.style.borderRadius > 0
+        mv.apply(region: node.mapRegion,
+                 pins: node.mapPins,
+                 mapType: Self.mkMapType(node.mapType))
+        host.addSubview(mv)
+        mount.mapView = mv
+    }
+
+    private static func mkMapType(_ s: String) -> MKMapType {
+        switch s {
+        case "satellite": return .satellite
+        case "hybrid":    return .hybrid
+        default:          return .standard
+        }
     }
 
     private func mountBlur(mount: MountedNode, node: RenderNode, flex: FlexNode) {
@@ -370,6 +426,8 @@ final class Renderer {
             mounted.textInputController = nil
             mounted.scrollView = nil
             mounted.blurView = nil
+            mounted.mapView?.removeFromSuperview()
+            mounted.mapView = nil
             applyAll(layer: layer, mount: mounted, node: next, flex: flex, parentOrigin: parentOrigin)
             counter += 1
 
@@ -381,6 +439,8 @@ final class Renderer {
                 mountScroll(mount: mounted, node: next, flex: flex)
             } else if next.kind == .blur {
                 mountBlur(mount: mounted, node: next, flex: flex)
+            } else if next.kind == .map {
+                mountMap(mount: mounted, node: next, flex: flex)
             } else {
                 let myOrigin = CGPoint(x: flex.frame.minX, y: flex.frame.minY)
                 for (cn, cf) in zip(next.children, flex.children) {
@@ -424,6 +484,12 @@ final class Renderer {
 
         if next.kind == .blur {
             reconcileBlur(mount: mounted, node: next, flex: flex)
+            updateMountedNode(mounted, with: next)
+            return
+        }
+
+        if next.kind == .map {
+            reconcileMap(mount: mounted, node: next, flex: flex)
             updateMountedNode(mounted, with: next)
             return
         }
@@ -479,8 +545,26 @@ final class Renderer {
         mount.scrollView = nil
         mount.blurView?.removeFromSuperview()
         mount.blurView = nil
+        mount.mapView?.removeFromSuperview()
+        mount.mapView = nil
         for child in mount.children {
             removeMountTree(child)
+        }
+    }
+
+    private func reconcileMap(mount: MountedNode, node: RenderNode, flex: FlexNode) {
+        let frame = flex.frame
+        if let mv = mount.mapView {
+            if mv.frame != frame { mv.frame = frame }
+            mv.onRegionChange = node.onMapRegionChange
+            mv.onPinTap = node.onMapPinTap
+            mv.layer.cornerRadius = CGFloat(node.style.borderRadius)
+            mv.layer.masksToBounds = node.style.borderRadius > 0
+            mv.apply(region: node.mapRegion,
+                     pins: node.mapPins,
+                     mapType: Self.mkMapType(node.mapType))
+        } else {
+            mountMap(mount: mount, node: node, flex: flex)
         }
     }
 

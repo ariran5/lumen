@@ -2,26 +2,34 @@ import SwiftUI
 
 public struct BrowserView: View {
     @State private var tabs = TabsStore.shared
+    @State private var isAddressFocused: Bool = false
+
+    // Interactive swipe-from-edge state. Палец двигает текущий контент вправо,
+    // на release: если за порогом — анимируем дальше и `goBack()`; иначе
+    // spring обратно на 0.
+    @State private var swipeOffset: CGFloat = 0
+    @State private var isSwiping: Bool = false
 
     public init() {}
 
+    /// Compact mode для chrome. Все случаи кроме home — bar схлопывается
+    /// в маленький disc 46pt с favicon/lock-glyph'ом. Tap → разворачивается
+    /// в полный вид с pre-selected URL'ом. Применимо к fast-app'ам И web —
+    /// контент важнее URL bar'а, контрол всегда на экране для возврата.
+    private var isCompactChrome: Bool {
+        guard !isAddressFocused else { return false }
+        guard let tab = tabs.activeTab else { return false }
+        return tab.currentURL != TabModel.homeURL
+    }
+
+    private var canSwipeBack: Bool {
+        guard let tab = tabs.activeTab else { return false }
+        return tab.currentURL != TabModel.homeURL
+    }
+
     public var body: some View {
-        VStack(spacing: 0) {
-            if let active = tabs.activeTab {
-                AddressBar(tab: active)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .onAppear(perform: applyLaunchURLIfPresent)
-
-                ProgressOverlay(visible: active.isLoading)
-            }
-
-            TabBar(tabs: tabs)
-            Divider()
-
-            // ZStack рендерит все табы одновременно; неактивные — opacity 0
-            // и без hit-test'а. Это сохраняет WKWebView / FastAppHost state
-            // (scroll position, JS heap) при переключении таб.
+        ZStack {
+            // ─── content (с offset'ом от interactive swipe) ───
             ZStack {
                 ForEach(tabs.tabs) { tab in
                     TabContent(tab: tab)
@@ -31,13 +39,91 @@ public struct BrowserView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .offset(x: swipeOffset)
+            .shadow(color: .black.opacity(isSwiping ? 0.35 : 0),
+                    radius: 14, x: -6, y: 0)
         }
-        .animation(.easeInOut(duration: 0.15), value: tabs.activeID)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            chromeOverlay
+        }
+        .background(DarkPalette.bg0.ignoresSafeArea())
+        .preferredColorScheme(.dark)
+        .gesture(swipeBackGesture)
+    }
+
+    @ViewBuilder
+    private var chromeOverlay: some View {
+        if let active = tabs.activeTab {
+            VStack(spacing: 8) {
+                if isAddressFocused {
+                    AddressSuggestions(query: active.addressInput) { url in
+                        active.addressInput = url
+                        active.commit()
+                        isAddressFocused = false
+                    }
+                }
+                // ProgressOverlay (loading indicator) только в full режиме
+                if !isCompactChrome {
+                    ProgressOverlay(visible: active.isLoading)
+                }
+                AddressBar(tab: active,
+                           isFocused: $isAddressFocused,
+                           onOpenLibrary: openLibrary,
+                           isCompact: isCompactChrome)
+                    .onAppear(perform: applyLaunchURLIfPresent)
+                    .frame(maxWidth: isCompactChrome ? 46 : .infinity, alignment: .center)
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 12)
+            .padding(.top, 4)
+            .animation(.spring(response: 0.32, dampingFraction: 0.86), value: isCompactChrome)
+            .animation(.spring(response: 0.32, dampingFraction: 0.86), value: isAddressFocused)
+        }
+    }
+
+    /// Interactive swipe-from-edge: tracking palm-driven offset в реальном
+    /// времени. На release решаем: pop или snap-back.
+    /// Пороги хардкод (220pt / 180pt predicted) — нормально для любого
+    /// iPhone, не нужно знать точную ширину экрана.
+    private var swipeBackGesture: some Gesture {
+        DragGesture(minimumDistance: 6, coordinateSpace: .global)
+            .onChanged { v in
+                guard canSwipeBack,
+                      v.startLocation.x < 30,
+                      v.translation.width >= 0 else { return }
+                isSwiping = true
+                swipeOffset = v.translation.width
+            }
+            .onEnded { v in
+                guard isSwiping else { return }
+                let predicted = v.predictedEndTranslation.width
+                let shouldPop = v.translation.width > 220 || predicted > 180
+
+                if shouldPop {
+                    withAnimation(.easeOut(duration: 0.22)) {
+                        swipeOffset = 800   // off-screen для любого iPhone
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                        tabs.activeTab?.goBack()
+                        swipeOffset = 0
+                        isSwiping = false
+                    }
+                } else {
+                    withAnimation(.spring(response: 0.30, dampingFraction: 0.85)) {
+                        swipeOffset = 0
+                    }
+                    isSwiping = false
+                }
+            }
+    }
+
+    private func openLibrary() {
+        tabs.open(url: "lumen://library")
     }
 
     private func applyLaunchURLIfPresent() {
         guard let tab = tabs.activeTab,
-              tab.mode == .start,
+              tab.currentURL == TabModel.homeURL,
               let raw = UserDefaults.standard.string(forKey: "url") else { return }
         tab.addressInput = raw
         tab.commit()
@@ -48,19 +134,24 @@ private struct TabContent: View {
     @Bindable var tab: TabModel
 
     var body: some View {
-        switch tab.mode {
-        case .start:
-            StartPage(tab: tab)
-                .transition(.opacity)
-        case .web(let url):
-            WebTabView(tab: tab)
-                .id(url.host ?? "")
-        case .fastApp(let url):
-            FastAppHost(url: url, tabID: tab.id, onBundleName: { name in
-                tab.pageTitle = name
-            })
-            .id(url.absoluteString)
-            .ignoresSafeArea(edges: .bottom)
+        // Без SwiftUI .transition — на тяжёлых UIViewRepresentable (FastAppHost
+        // с UINavigationController внутри, WKWebView) встроенные транзишны
+        // дёргают frame во время mount'а и выглядят jerky. Outer-level
+        // interactive swipe в BrowserView сам управляет offset'ом.
+        Group {
+            switch tab.mode {
+            case .start:
+                StartPage(tab: tab)
+            case .web:
+                WebTabView(tab: tab)
+                    .ignoresSafeArea()
+            case .fastApp(let url):
+                FastAppHost(url: url, tabID: tab.id, onBundleName: { name in
+                    tab.pageTitle = name
+                })
+                .id(url.absoluteString)
+                .ignoresSafeArea()
+            }
         }
     }
 }
@@ -94,14 +185,16 @@ private struct StartPage: View {
     @Bindable var tab: TabModel
 
     private let exampleApps: [(label: String, url: String)] = [
-        ("Tabs Lab — multi-tab API",   "http://192.168.0.108:8080"),
-        ("HN reader — real-world demo", "http://192.168.0.108:8081"),
-        ("Drag Lab — gestures + spring", "http://192.168.0.108:8082"),
-        ("Glass Lab — iOS 26 Liquid Glass", "http://192.168.0.108:8083"),
-        ("Scroll Lab — scroll + safe-area", "http://192.168.0.108:8084"),
-        ("Input Lab — TextInput",       "http://192.168.0.108:8085"),
-        ("Sheet Lab — bottomSheet",     "http://192.168.0.108:8086"),
-        ("Bank Lab — full app demo",    "http://192.168.0.108:8087"),
+        ("Tabs Lab — multi-tab API",   "http://192.168.0.107:8080"),
+        ("HN reader — real-world demo", "http://192.168.0.107:8081"),
+        ("Drag Lab — gestures + spring", "http://192.168.0.107:8082"),
+        ("Glass Lab — iOS 26 Liquid Glass", "http://192.168.0.107:8083"),
+        ("Scroll Lab — scroll + safe-area", "http://192.168.0.107:8084"),
+        ("Input Lab — TextInput",       "http://192.168.0.107:8085"),
+        ("Sheet Lab — bottomSheet",     "http://192.168.0.107:8086"),
+        ("Bank Lab — full app demo",    "http://192.168.0.107:8087"),
+        ("Map Lab — native MKMapView",  "http://192.168.0.107:8088"),
+        ("Platform Lab — Tier 1 device APIs", "http://192.168.0.107:8089"),
         ("History — built-in fast-app", "lumen://history"),
         ("Hacker News (web fallback)",  "https://news.ycombinator.com"),
     ]

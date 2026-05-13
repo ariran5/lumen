@@ -56,6 +56,8 @@
 | P6.1 | EffectScope в CoreFramework | scope.dispose() cascades child effects ✓ |
 | P6.2 | Builders разделяют style/bindings (function → thunk-binding) | `View({opacity: () => sig.value})` ✓ |
 | P6.3 | `lumen._patchProp(id, key, value)` + JS-side `registerBindings(tree)` per-prop effects | ScrollLab: 150 r/s → ~2 r/s (Vapor-style win) ✓ |
+| **P8 — Platform Tier 1** | clipboard / linking / share / actionSheet / secureStorage / imagePicker / ws | 7 bridges; PlatformLab demo; tsc clean ✓ |
+| **P9.A — Tier 2 / reactive signals** | `lumen.appState`, `lumen.appearance.theme`, `lumen.network.{online,type}` (signal-backed getters, push from native) | PlatformLab AppState/Theme/Network карточки реактивно обновляются ✓ |
 
 ### Архитектурные решения, зафиксированные по дороге
 
@@ -525,6 +527,10 @@ Use-case появится когда захочется "open any .ts URL anywhe
 - 2026-05-13 (session 009) — ScrollView реализован через **nested Renderer**: UIScrollView содержит contentView, чей CALayer — rootLayer для inner Renderer'а в режиме `.scrollContent` (height: ∞). После layout `computedContentHeight()` отдаёт max(child.frame.maxY) → contentSize.
 - 2026-05-13 (session 009) — SafeArea — **reactive через signal'ы в CoreFramework**, не статические getter'ы. Native `viewSafeAreaInsetsDidChange` дёргает `lumen._updateSafeArea` → пушит в `_saT/_saB/_saL/_saR` signals → автоматический re-render компонентов читающих `lumen.safeArea.bottom`.
 - 2026-05-13 (session 009) — Лендинг Lumen-на-Lumen добавлен в backlog как showcase-фастапп — позже как наследник готовности ScrollView+SafeArea+Blur. Дизайн обсудить отдельно перед реализацией.
+- 2026-05-13 (session 010) — Shell-rewrite-on-Lumen деприоритизирован: shell уже работает на SwiftUI с Liquid Glass, переписывать ради dogfood'а не даёт пользователю value. Фокус сместился на расширение device-API.
+- 2026-05-13 (session 010) — Platform Tier 1 закрыт за один заход: 7 bridges (clipboard, linking, share, actionSheet, secureStorage, imagePicker, websocket). Pattern для каждого — отдельный `JSEngine+*.swift`, вызов из `installPlatformBridges()`. PHPicker via @unchecked-Sendable accumulator (Swift 6 strict concurrency запрещает captured var [Any] в @Sendable closures).
+- 2026-05-13 (session 010) — Tier 2 (push, biometrics, location, theme, lifecycle, network info) и Tier 3 (camera, audio, video, sensors) задокументированы в `docs/PLAN-platform-tier1.md` как next-up.
+- 2026-05-13 (session 010) — DX-инфра (HMR, npm bundling, @lumen/ui, DevTools, FPS overlay) отложена в `docs/backlog-infra.md` — приоритет на capabilities платформы, чтоб люди реально могли строить апп.
 
 ---
 
