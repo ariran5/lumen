@@ -60,6 +60,8 @@
 | **P9.A — Tier 2 / reactive signals** | `lumen.appState`, `lumen.appearance.theme`, `lumen.network.{online,type}` (signal-backed getters, push from native) | PlatformLab AppState/Theme/Network карточки реактивно обновляются ✓ |
 | **P9.B — Tier 2 / biometrics + pull-to-refresh + status bar** | `lumen.biometrics.{authenticate,available}` (LAContext), `onRefresh: () => Promise` на ScrollView (UIRefreshControl + thenable-await), `lumen.statusBar.style({theme,hidden})` | PlatformLab Biometrics / Pull-to-refresh / StatusBar карточки работают на устройстве ✓ |
 | **P9.C — Tier 2 / local notifications + deep links** | `lumen.notifications.{requestPermission,schedule,cancel,cancelAll,onTap}` (UNUserNotificationCenter), `lumen.linking.onIncoming.subscribe(fn)` (SwiftUI `.onOpenURL` → `IncomingURLStore` → NativeNotifier), `lumen://` URL scheme в Info.plist | PlatformLab Notifications / DeepLink карточки работают на устройстве ✓ |
+| **P10.A — Tier 3.A / document picker + fetch binary I/O** | `lumen.documentPicker.pick({types,multiple}) → Promise<PickedDocument[] \| null>` (UIDocumentPickerViewController + security-scoped resource + tmp copy); `fetch()` поддерживает `Response.arrayBuffer()` и ArrayBuffer/TypedArray body через JSC C-API (`MakeArrayBufferWithBytesNoCopy` + malloc/free deallocator) | PlatformLab DocumentPickerCard с type-aware preview работает на устройстве ✓ |
+| **P10.B — Sandbox foundation (Block 1)** | `Origin` value type (scheme+host+port, default-port нормализация, shortHash); `OriginContext` + Registry per-origin persistent state (storage prefix, Keychain service, FS roots); `JSEngine.init(origin:)` обязательный; `lumen.storage` / `lumen.secureStorage` namespacing per origin; `LumenManifest` расширен опциональными `permissions` / `connect` / `storage_quota` | Invisible refactor; single-app продолжает работать ✓ |
 
 ### Архитектурные решения, зафиксированные по дороге
 
@@ -403,16 +405,9 @@ Hooks-обёртка типа `<Animated.View>` не нужна — AnimatedValu
 
 Эти метрики важны для Phase 0 closure, но render perf — главный показатель — пройден.
 
-### P4.5 — Permissions модель (~1 сессия)
+### P4.5 — Permissions модель → раскрылась в Sandbox roadmap (см. ниже)
 
-Per-origin permissions (камера, гео, нотификации, accelerometer). API:
-```js
-const granted = await lumen.permissions.request('geolocation')
-```
-
-UI: системный prompt + наш «домен X запрашивает доступ к Y» (как Safari).
-
-Хранение: `UserDefaults` с ключом `permission.<host>.<type>`.
+Изначально планировался один заход (`lumen.permissions.request('geolocation')` + per-host UserDefaults storage). После design-обсуждения в session 014 решено делать целиком sandbox-модель (origin isolation + permissions + network policy + quotas), потому что permissions без isolation не имеют смысла. Детали — раздел **«Phase 6 — Sandbox / per-origin isolation»** ниже. Block 1 (foundation) закрыт; Blocks 2-5 — отдельными заходами по запросу.
 
 ---
 
@@ -484,9 +479,10 @@ Use-case появится когда захочется "open any .ts URL anywhe
 
 Пока не блокирует, но важно для реального продукта:
 
-- **Permissions**: per-origin модель (gradio camera/notifications/geolocation на запрос)
-- **Cookies**: shared между WebView и Fast Mode
-- **Storage**: `lumen.storage` (key-value, AsyncStorage-подобный) ✓ закрыто (S1.5)
+- **Sandbox / per-origin isolation**: → закрывается в Phase 6 ниже. Block 1 (foundation) ✓ (P10.B); Blocks 2-5 — todo.
+- **Permissions**: → часть Phase 6 (Block 3). Модель и решения зафиксированы в session 014.
+- **Cookies**: shared между WebView и Fast Mode — нужно решать в рамках Phase 6 (per-origin cookie jar)
+- **Storage**: `lumen.storage` (key-value, AsyncStorage-подобный) ✓ закрыто (S1.5), namespacing per origin ✓ (P10.B)
 - **WebSocket**: для realtime приложений ✓ закрыто (P8 / Tier 1)
 - **Notifications local**: ✓ закрыто (P9.C). APNS — backlog Tier 2.5
 - **Deep links (custom scheme)**: ✓ закрыто (P9.C). Universal Links (https) — backlog Tier 2.5
@@ -494,6 +490,47 @@ Use-case появится когда захочется "open any .ts URL anywhe
 - **Crash reporting**: для production
 - **Settings sync** между устройствами
 - **iCloud / signin**
+
+---
+
+## Phase 6 — Sandbox / per-origin isolation
+
+> Делает Lumen настоящим браузером. Сейчас single-app PlatformLab работает без изоляции; когда дозреют все блоки + multi-app shell, два сайта в разных табах перестанут видеть друг друга — точно как в Safari/Chrome.
+
+**Решения** (детали в session 014):
+- Identity = `scheme://host:port` (без app_id / app groups — claim'ы небезопасны без подписи)
+- Default-deny permissions; default-allow только своему host (+поддомены, +любые порты)
+- Двухслойная permission модель: OS → Lumen, Lumen → app per origin
+- HTTPS-only с exception для `localhost`/`*.local` + Developer Mode
+- Apps НЕ объявляют custom schemes — HTTPS deep links через шелл
+- 100MB storage quota per origin (больше — через permission prompt)
+- PSL для `*.acme.com` matching
+
+**Контекстная архитектура** — `OriginContext` (per origin, shared across tabs of same site: permissions/storage/FS/cache) + `TabContext` (per tab, runtime: JSContext/history/ref → OriginContext).
+
+### P10.B — Block 1: Foundation ✓ закрыт (session 014)
+
+`Origin` + `OriginContext` + `OriginContextRegistry`; namespacing для `lumen.storage` (UserDefaults prefix) и `lumen.secureStorage` (Keychain service); `LumenManifest` расширен `permissions` / `connect` / `storage_quota` (опциональные, runtime не читает).
+
+### P10.C — Block 2: Network policy (~1 сессия)
+
+`connect` allowlist enforcement в fetch + WebSocket bridges. Implicit allow для своего host + поддоменов + любых портов. PSL подключить (или MVP-матчер). Cross-origin redirect блокируется если target не в `connect`. Wildcard `"*"` allowed с варнингом в шелле.
+
+### P10.D — Block 3: Permission system (~1-2 сессии)
+
+`PermissionStore` (`{origin → {capability → grant}}`); UI prompt («acme.com wants to use camera») через `lumen.alert` или новый dedicated modal; wire к: `notifications`, `biometric`, `camera`, `mic`, `photos`, `location`, `contacts`. Settings page «Clear site data» / «Revoke permission» per origin.
+
+### P10.E — Block 4: HTTPS-only + Developer Mode (~0.5 сессии)
+
+`BundleLoader` reject'ит http URLs кроме `localhost`/`*.local`/dev-mode. Toggle в шелл-settings. Опционально per-origin override list для preview-доменов.
+
+### P10.F — Block 5: Storage quotas (~0.5 сессии)
+
+Tracking размера UserDefaults entries per origin (хеш по prefix); 100MB default; throw exception при превышении; manifest `storage_quota` upgrade требует permission prompt.
+
+### P10.G — Block 6: Multi-app shell (~1-2 сессии)
+
+`lumen.tabs` registry уже частично есть (TabsStore). Нужны: app loader (fetch манифест → проверить integrity (hash манифеста, опционально `files: {sha256}` для каждого файла) → instantiate JSEngine с правильным Origin); per-tab JSEngine lifecycle; correctly switching between loaded apps (background tab pause? memory budget?).
 
 ---
 
@@ -557,6 +594,12 @@ Use-case появится когда захочется "open any .ts URL anywhe
 - 2026-05-13 (session 010) — DX-инфра (HMR, npm bundling, @lumen/ui, DevTools, FPS overlay) отложена в `docs/backlog-infra.md` — приоритет на capabilities платформы, чтоб люди реально могли строить апп.
 - 2026-05-14 (session 013) — Tier 2 Заход C закрыт: notifications + deep links. Delegate `UNUserNotificationCenter` — singleton-на-процесс (delegate у Apple один глобально), `pendingTaps` drain'ится из JS через `_consumeTaps` — нет цепочки JS-callback'ов через Sendable границу. Deep links — SwiftUI `.onOpenURL` (нет AppDelegate / SceneDelegate, чисто декларативно), `IncomingURLStore` буферизует cold-launch URL'ы до subscribe'а JS. URL scheme `lumen://` зарегистрирован в Info.plist + project.yml.
 - 2026-05-14 (session 013) — Universal Links и APNS (remote push) добавлены в backlog как Tier 2.5+: оба требуют Apple-side infra (associated domains entitlement + apple-app-site-association для UL; APNS сертификат / aps-environment entitlement / device token registration для push). Отдельная инфра-возня — не блокирует фичи Tier 2.
+- 2026-05-14 (session 014) — Document picker закрыт через `UIDocumentPickerViewController(forOpeningContentTypes:asCopy:true)`. Security-scoped resource обязателен (`startAccessingSecurityScopedResource` перед чтением, иначе iCloud/external Files обломается на permission denied). Copy в tmp с сохранением оригинального имени отдельно (`{uri, name, size, mime}`).
+- 2026-05-14 (session 014) — `fetch()` расширен до binary I/O через JSC C-API (`JSObjectMakeArrayBufferWithBytesNoCopy` + malloc/free deallocator на write side; `JSObjectGetArrayBufferBytesPtr` / `JSObjectGetTypedArrayBytesPtr` на read). ObjC bridge не умеет ArrayBuffer; альтернативы C-API нет. Backwards compat — string body продолжает работать как UTF-8 fallback.
+- 2026-05-14 (session 014) — **Sandbox / isolation model выбрана: web-style origin** (`scheme + host + port`). Без манифестных `app_id`, без app groups (claim'ы без подписи = небезопасно). Default-deny permissions; default-allow network — только свой host + поддомены + любые порты. Cross-origin redirect блокируется если target не в `connect`. Public Suffix List для правильного matching'а `*.acme.com` vs `*.co.uk`. HTTPS-only для apps, exception для `localhost`/`*.local` + Developer Mode toggle. Apps НЕ объявляют custom URL schemes — HTTPS deep links через сам Lumen-шелл.
+- 2026-05-14 (session 014) — Permissions — двухслойная модель: OS → Lumen (Apple grant), Lumen → app per origin (registry `{origin → {capability → grant}}`). Gesture-API (documentPicker, imagePicker, share, clipboard.write) — без persistent grant, каждый клик «выбрать» = consent.
+- 2026-05-14 (session 014) — Архитектура контекстов: `OriginContext` (per origin, shared across tabs of same site — permissions/storage/FS) + `TabContext` (per tab, runtime — JSContext/history). Registry дедуплицирует OriginContext по Origin. Это браузерная модель `Profile → Site → Tab`.
+- 2026-05-14 (session 014) — Sandbox Block 1 закрыт: Origin + OriginContext + Registry + namespacing для `lumen.storage` (UserDefaults prefix) и `lumen.secureStorage` (Keychain service). LumenManifest расширен опциональными `permissions` / `connect` / `storage_quota` — runtime пока их не enforce'ит, поля под будущие Блоки 2-5. Invisible refactor — single-app продолжает работать, multi-app sandbox включится автоматически когда дозреют tabs + остальные блоки.
 
 ---
 

@@ -91,17 +91,86 @@ A → B → C. После A появляется реактивный систе
 
 ---
 
-# Tier 3 (на потом)
+# Tier 3 — Capabilities (capability-by-capability, по запросу)
 
-Не блокеры реального продакшена, но добавляют классы приложений:
+Не блокеры реального продакшена, но добавляют классы приложений. Делаются отдельными заходами под конкретный use-case.
 
-- **Camera capture** (отдельно от picker) — для сканеров/QR. `AVCaptureSession` или `UIImagePickerController(camera)`. Требует `NSCameraUsageDescription`.
-- **Document picker** — `UIDocumentPickerViewController`. Files app, iCloud Drive, sharing с другими app'ами.
-- **Audio player** — `AVAudioPlayer` через `lumen.audio.play(uri)`. Recorder — `AVAudioRecorder`.
-- **Video player** — `<Video src=…/>` primitive поверх `AVPlayerLayer`.
-- **Sensors** — `CMMotionManager` (gyro / accelerometer / motion). Для AR/игр.
-- **HealthKit** — `HKHealthStore`. Узкий сегмент, но без альтернативы.
-- **Bluetooth/BLE** — `CBCentralManager`.
-- **In-App Purchase** — `StoreKit 2`. Required для платных fast-app'ов.
-- **Sign in with Apple** — `ASAuthorizationController`. Иногда обязателен по App Store guidelines.
-- **Mail/SMS/Phone composers** — `MFMailComposeViewController` / `MFMessageComposeViewController` / `tel:` через linking уже работает.
+| API | Реализация | Статус |
+|---|---|---|
+| **Document picker** — `UIDocumentPickerViewController`. Files app, iCloud Drive, sharing с другими app'ами | `lumen.documentPicker.pick({types, multiple})` + security-scoped resource + tmp copy | ✓ done (2026-05-14, session 014) |
+| **`fetch` binary I/O** — `Response.arrayBuffer()` + ArrayBuffer/TypedArray request body | JSC C-API (`MakeArrayBufferWithBytesNoCopy` + malloc/free) | ✓ done (2026-05-14, session 014) |
+| **Camera capture** (отдельно от picker) — для сканеров/QR | `AVCaptureSession` или `UIImagePickerController(camera)`. Требует `NSCameraUsageDescription` | — |
+| **Audio player** — `lumen.audio.play(uri)` | `AVAudioPlayer`. Recorder — `AVAudioRecorder` | — |
+| **Video player** — `<Video src=…/>` primitive | `AVPlayerLayer` | — |
+| **Sensors** — gyro/accelerometer/motion | `CMMotionManager` | — |
+| **HealthKit** — fitness/health data | `HKHealthStore`. Узкий сегмент, но без альтернативы | — |
+| **Bluetooth/BLE** | `CBCentralManager` | — |
+| **In-App Purchase** | `StoreKit 2`. Required для платных fast-app'ов | — |
+| **Sign in with Apple** | `ASAuthorizationController`. Иногда обязателен по App Store guidelines | — |
+| **Mail/SMS composers** | `MFMailComposeViewController` / `MFMessageComposeViewController` (phone — `tel:` через linking уже работает) | — |
+
+---
+
+# Sandbox / per-origin isolation (Phase 6 / P10.B-G)
+
+> Это не «next capability», это горизонтальный слой который делает Lumen настоящим браузером. Без этого ни один app не должен пускаться рядом с другим. Сейчас single-app демо работает invisible-через-sandbox-foundation; полноценная изоляция включится когда дозреют Blocks 2-6.
+
+**Дизайн-решения** зафиксированы в [sessions/014](../sessions/014-2026-05-14-tier3-docpicker-fetch-binary-sandbox-foundation.md):
+
+- Identity = `scheme://host:port` (как web). Без манифестных `app_id`, без app groups (claim'ы без подписи небезопасны).
+- Default-deny permissions; default-allow network только своему host + поддомены + любые порты. Wildcard `"*"` в `connect` с варнингом.
+- Двухслойная permission модель: OS → Lumen, Lumen → app per origin.
+- HTTPS-only с exception для `localhost`/`*.local` + Developer Mode toggle.
+- 100MB storage quota per origin (override через permission prompt).
+- PSL для `*.acme.com` matching (правильно отделяет `app.co.uk` ≠ `co.uk` parent).
+- Apps НЕ объявляют custom schemes — HTTPS deep links обрабатывает Lumen-шелл.
+
+**Архитектура контекстов:**
+
+```
+OriginContext (per origin, shared across tabs of same site)
+├── permissions, storage, secureStorage, FS root, cache, cookies, manifest hashes
+
+TabContext (per tab, one origin)
+├── JSContext, current URL, history, ref → OriginContext (через registry)
+```
+
+## Blocks
+
+| Block | Что | Статус |
+|---|---|---|
+| **P10.B — 1: Foundation** | `Origin` value type; `OriginContext` + Registry; `JSEngine.init(origin:)`; namespacing `lumen.storage` (UserDefaults prefix) и `lumen.secureStorage` (Keychain service); `LumenManifest` опциональные `permissions`/`connect`/`storage_quota` | ✓ done (2026-05-14, session 014) |
+| **P10.C — 2: Network policy** | `connect` allowlist enforcement в fetch + WebSocket. Implicit allow свой host + поддомены + порты. PSL (или MVP-матчер сначала). Cross-origin redirect блок. `"*"` с варнингом | pending |
+| **P10.D — 3: Permission system** | `PermissionStore` registry; UI prompt («acme.com wants camera»); wire к notifications/biometric/camera/mic/photos/location/contacts; settings «Clear site data» / «Revoke permission» per origin | pending |
+| **P10.E — 4: HTTPS-only + Developer Mode** | Loader reject'ит http кроме localhost/*.local/dev-mode; toggle в шелл-settings; опционально per-origin override list | pending |
+| **P10.F — 5: Storage quotas** | Tracking размера storage per origin; 100MB default; throw при превышении; manifest `storage_quota` upgrade через permission prompt | pending |
+| **P10.G — 6: Multi-app shell** | App loader (fetch manifest → integrity check → instantiate JSEngine с правильным Origin); per-tab JSEngine lifecycle; background tab pause / memory budget; integrity verification через `files: {sha256}` в манифесте | pending |
+
+## Что в `lumen.json` после всех блоков
+
+```jsonc
+{
+  "name": "Acme Notes",
+  "version": "1.2.0",
+  "entry": "main.js",
+  "files": { "main.js": "sha256:..." },           // integrity (Block 6)
+  "permissions": ["notifications", "camera"],     // declared, user всё равно подтвердит (Block 3)
+  "connect": ["api.acme.com", "*.cdn.acme.com"],  // network whitelist (Block 2)
+  "storage_quota": "200MB",                       // > default требует permission (Block 5)
+  "statusBar": "auto",
+  "orientations": ["portrait"]
+}
+```
+
+## Что НЕ делаем (но место есть)
+
+- App groups / sharing между origin'ами — не нужно, обмен через user-gesture API
+- Custom URL schemes для apps (`acme://`) — не нужно, HTTPS deep links через шелл
+- Signed manifests (publisher identity) — overkill пока нет marketplace
+- Marketplace и третьи-стороны
+- Background fetch / push с проверкой capability — Tier 2.5
+
+## Open / followups
+
+- **Filesystem namespacing для bridges** — `imagePicker` / `documentPicker` сейчас кладут tmp файлы в shared `tmp/lumen-images/` / `tmp/lumen-docs/`. UUID'ы делают cross-app pollution маловероятным, но изоляция не идеальна. Перевести на `originContext.tmpRoot` — мелкая отдельная задача, любой Block.
+- **Migration старых storage ключей** — `lumen.storage.<key>` (без хеша) после Block 1 недоступны. Acceptable (нет публичных users).
