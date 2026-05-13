@@ -1,56 +1,56 @@
-// ScrollLab — 40 карточек в ScrollView с onScroll. Sticky overlay
-// (Glass-pill) сверху меняет opacity от 0 до 1 по мере скролла.
+// ScrollLab — Vapor-style:
+// - StickyOverlay: thunks для opacity и текста (per-prop effects)
+// - Slot: динамический список карточек, кол-во меняется через signal,
+//   mount(App) НЕ пересобирается при изменении
 
 const tapped = signal<number | null>(null)
 const scrollOffset = signal(0)
 const contentHeight = signal(0)
 const viewportHeight = signal(0)
+const cardCount = signal(20)
 
-// Auto-show FPS HUD так что видно сколько кадров и сколько занимает
-// каждый render.
 lumen.bench.showFPS(true)
 lumen.bench.resetStats()
 
 function App() {
   return View({flex: 1, backgroundColor: '#0F0F12'},
-    Stage(),
-    StickyOverlay(),
+    // Scroll area: flex:1 + sticky overlay внутри (visual only)
+    View({flex: 1},
+      Stage(),
+      StickyOverlay(),
+    ),
+    // AddRemoveBar — в flow ниже scroll'а. UIScrollView frame не покрывает
+    // эту область, таппы по Pressable доходят через GestureRouter.
+    AddRemoveBar(),
   )
 }
 
 function Stage() {
-  return View({flex: 1},
-    ScrollView({
-      flex: 1,
-      paddingTop: 60 + lumen.safeArea.top,
-      paddingBottom: 16 + lumen.safeArea.bottom,
-      paddingLeft: 16,
-      paddingRight: 16,
-      gap: 12,
-      onScroll: (e) => {
-        scrollOffset.value = Math.round(e.offset)
-        contentHeight.value = Math.round(e.contentHeight)
-        viewportHeight.value = Math.round(e.viewportHeight)
-      },
+  return ScrollView({
+    flex: 1,
+    paddingTop: 60 + lumen.safeArea.top,
+    paddingBottom: 16,
+    paddingLeft: 16,
+    paddingRight: 16,
+    gap: 12,
+    onScroll: (e) => {
+      scrollOffset.value = Math.round(e.offset)
+      contentHeight.value = Math.round(e.contentHeight)
+      viewportHeight.value = Math.round(e.viewportHeight)
     },
-      ...Array.from({length: 40}, (_, i) => Card(i)),
+  },
+    Slot({flexDirection: 'column', gap: 12},
+      () => Array.from({length: cardCount.value}, (_, i) => Card(i))
     ),
   )
 }
 
-// Прозрачность header'а появляется по мере прокрутки первых 80pt.
 function StickyOverlay() {
-  const o = Math.min(1, Math.max(0, scrollOffset.value / 80))
-  const progress = (contentHeight.value > viewportHeight.value)
-    ? scrollOffset.value / (contentHeight.value - viewportHeight.value)
-    : 0
-  const pct = Math.round(Math.min(1, Math.max(0, progress)) * 100)
-
   return View({
     position: 'absolute',
     top: lumen.safeArea.top + 8,
     left: 16, right: 16,
-    opacity: o,
+    opacity: () => Math.min(1, Math.max(0, scrollOffset.value / 80)),
   },
     Glass({
       variant: 'regular',
@@ -64,9 +64,50 @@ function StickyOverlay() {
       Text({fontSize: 13, fontWeight: '700', color: '#0F0F12'},
         'Scroll Lab'),
       Text({fontSize: 11, color: '#0F0F1299', flex: 1},
-        tapped.value === null
-          ? `${pct}% · offset ${scrollOffset.value}pt`
-          : `card #${tapped.value} · ${pct}%`),
+        () => {
+          const c = contentHeight.value
+          const v = viewportHeight.value
+          const o = scrollOffset.value
+          const progress = (c > v) ? o / (c - v) : 0
+          const pct = Math.round(Math.min(1, Math.max(0, progress)) * 100)
+          const t = tapped.value
+          return t === null
+            ? `${pct}% · ${cardCount.value} cards`
+            : `card #${t} · ${pct}%`
+        }),
+    ),
+  )
+}
+
+function AddRemoveBar() {
+  return View({
+    paddingTop: 10,
+    paddingBottom: 10 + lumen.safeArea.bottom,
+    paddingLeft: 16, paddingRight: 16,
+    flexDirection: 'row',
+    gap: 8,
+    backgroundColor: '#15151A',
+  },
+    Pressable({
+      flex: 1, height: 44,
+      backgroundColor: '#1E40AF', borderRadius: 22,
+      justifyContent: 'center', alignItems: 'center',
+      onTap: () => { cardCount.value++; lumen.haptics('light') },
+    },
+      Text({fontSize: 14, fontWeight: '600', color: '#FFFFFF'}, '+ Add card'),
+    ),
+    Pressable({
+      flex: 1, height: 44,
+      backgroundColor: '#7F1D1D', borderRadius: 22,
+      justifyContent: 'center', alignItems: 'center',
+      onTap: () => {
+        if (cardCount.value > 0) {
+          cardCount.value--
+          lumen.haptics('light')
+        }
+      },
+    },
+      Text({fontSize: 14, fontWeight: '600', color: '#FFFFFF'}, '− Remove'),
     ),
   )
 }
@@ -89,8 +130,8 @@ function Card(i: number) {
     Text({fontSize: 13, fontWeight: '600', color: '#A5B4FC'},
       `Card ${i + 1}`),
     Text({fontSize: 12, color: '#9CA3AF', numberOfLines: 2},
-      `Scroll up to see the sticky pill fade in. The progress percentage and ` +
-      `offset come live from native UIScrollViewDelegate via onScroll.`),
+      `Children-thunks: add/remove cards through a signal — only this Slot's ` +
+      `subtree rebuilds. Sticky pill and card #${i + 1} unaffected.`),
   )
 }
 

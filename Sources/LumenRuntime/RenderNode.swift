@@ -9,6 +9,10 @@ struct RenderNode {
 
     var kind: Kind = .view
     var key: String?
+    /// JS-generated id (см. CoreFramework.nextId). Renderer индексирует
+    /// MountedNode по этому id, чтобы fine-grained binding'и со стороны JS
+    /// могли патчить конкретный CALayer через lumen._patchProp.
+    var id: Int?
     var style: ViewStyle = ViewStyle()
     var text: String?
     var source: String?
@@ -67,6 +71,9 @@ extension RenderNode {
         }
         if let key = string(value, "key") {
             node.key = key
+        }
+        if let idVal = subscript_(value, "id"), idVal.isNumber {
+            node.id = Int(idVal.toInt32())
         }
         if let styleVal = subscript_(value, "style"), styleVal.isObject {
             if let styleDict = styleVal.toDictionary() as? [String: Any] {

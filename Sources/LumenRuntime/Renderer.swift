@@ -60,6 +60,17 @@ final class Renderer {
     private(set) var lastRenderMs: Double = 0
     private(set) var lastDiffMs: Double = 0
 
+    /// Global node-id → MountedNode index. Используется для fine-grained
+    /// JS-биндингов: `lumen._patchProp(id, key, val)` находит CALayer и
+    /// применяет одно свойство без полного reconcile-обхода.
+    @MainActor static var nodeIndex: [Int: WeakMountedRef] = [:]
+    @MainActor
+    final class WeakMountedRef {
+        weak var node: MountedNode?
+        weak var renderer: Renderer?
+        init(_ n: MountedNode, _ r: Renderer) { self.node = n; self.renderer = r }
+    }
+
     private var gestureRouter: GestureRouter?
 
     init(rootLayer: CALayer) {
@@ -71,6 +82,54 @@ final class Renderer {
         self.init(rootLayer: hostView.layer)
         self.hostView = hostView
         gestureRouter = GestureRouter(host: hostView, rootLayer: hostView.layer)
+    }
+
+    /// Hook вызываемый после `replaceChildren`/`relayout`. Используется
+    /// LumenScrollView чтобы пересчитать contentSize когда slot изменил
+    /// число детей.
+    var onAfterLayout: (@MainActor () -> Void)?
+
+    /// Колбэк после reconcile/replaceChildren с id-шниками узлов которые
+    /// сняты с маунта. JS-сторона использует это чтобы dispose'нуть
+    /// per-node EffectScope'ы (см. `nodeScopes` в CoreFramework).
+    var onNodesDisposed: (@MainActor ([Int]) -> Void)?
+
+    /// Накапливает ids между шагами reconcile. Flush'ится в конце
+    /// `relayout()` и `replaceChildren()` единственным batch-вызовом.
+    private var disposalBuffer: [Int] = []
+
+    /// Меняет children узла с заданным id, мутирует lastTree, и запускает
+    /// relayout. Используется Slot-thunk'ами через `lumen._replaceChildren`.
+    func replaceChildren(id: Int, newChildren: [RenderNode]) {
+        guard var tree = lastTree else { return }
+        if Self.mutateChildren(&tree, id: id, newChildren: newChildren) {
+            lastTree = tree
+            relayout()
+            onAfterLayout?()
+            flushDisposalBuffer()
+        }
+    }
+
+    private func flushDisposalBuffer() {
+        guard !disposalBuffer.isEmpty else { return }
+        let ids = disposalBuffer
+        disposalBuffer.removeAll(keepingCapacity: true)
+        onNodesDisposed?(ids)
+    }
+
+    private static func mutateChildren(_ node: inout RenderNode,
+                                        id: Int,
+                                        newChildren: [RenderNode]) -> Bool {
+        if node.id == id {
+            node.children = newChildren
+            return true
+        }
+        for i in 0..<node.children.count {
+            if mutateChildren(&node.children[i], id: id, newChildren: newChildren) {
+                return true
+            }
+        }
+        return false
     }
 
     /// Returns the maximum Y-extent of the root's children + bottom padding.
@@ -138,6 +197,8 @@ final class Renderer {
 
         lastRenderMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
         RenderMetrics.shared.record(lastRenderMs)
+
+        flushDisposalBuffer()
     }
 
     // MARK: - Flex tree
@@ -166,6 +227,9 @@ final class Renderer {
         let layer = makeLayer(for: node)
         parent.addSublayer(layer)
         let mount = MountedNode(node: node, layer: layer)
+        if let nid = node.id {
+            Self.nodeIndex[nid] = WeakMountedRef(mount, self)
+        }
         applyAll(layer: layer, mount: mount, node: node, flex: flex, parentOrigin: parentOrigin)
         counter += 1
 
@@ -266,6 +330,24 @@ final class Renderer {
 
     // MARK: - Reconcile
 
+    /// При reconcile id узла может смениться (build-time счётчик в JS
+    /// перевыдаёт ids на каждом mount-rerun). Обновляем nodeIndex чтобы
+    /// per-prop effect'ы для нового id находили правильный CALayer.
+    private func updateMountedNode(_ mounted: MountedNode, with next: RenderNode) {
+        if let oldId = mounted.node.id, oldId != next.id {
+            Self.nodeIndex.removeValue(forKey: oldId)
+            // Старый id больше нигде не используется (layer reused, но id
+            // принадлежал JS-узлу который теперь заменён). JS-scope нужно
+            // dispose'ить — иначе orphan effect'ы продолжают патчить layer
+            // под уже не своим id.
+            disposalBuffer.append(oldId)
+        }
+        if let newId = next.id, mounted.node.id != newId {
+            Self.nodeIndex[newId] = WeakMountedRef(mounted, self)
+        }
+        mounted.node = next
+    }
+
     private func reconcile(parent: CALayer,
                            parentOrigin: CGPoint,
                            mounted: MountedNode,
@@ -310,7 +392,7 @@ final class Renderer {
                     mounted.children.append(cm)
                 }
             }
-            mounted.node = next
+            updateMountedNode(mounted, with: next)
             return
         }
 
@@ -324,25 +406,25 @@ final class Renderer {
 
         if next.kind == .virtualList {
             reconcileVirtualList(mount: mounted, node: next, flex: flex)
-            mounted.node = next
+            updateMountedNode(mounted, with: next)
             return
         }
 
         if next.kind == .textInput {
             reconcileTextInput(mount: mounted, node: next, flex: flex)
-            mounted.node = next
+            updateMountedNode(mounted, with: next)
             return
         }
 
         if next.kind == .scroll {
             reconcileScroll(mount: mounted, node: next, flex: flex)
-            mounted.node = next
+            updateMountedNode(mounted, with: next)
             return
         }
 
         if next.kind == .blur {
             reconcileBlur(mount: mounted, node: next, flex: flex)
-            mounted.node = next
+            updateMountedNode(mounted, with: next)
             return
         }
 
@@ -376,12 +458,16 @@ final class Renderer {
             }
         }
 
-        mounted.node = next
+        updateMountedNode(mounted, with: next)
     }
 
     private func removeMountTree(_ mount: MountedNode) {
         gestureRouter?.removeHandlers(for: mount.layer)
         AnimationManager.shared.unbindLayer(mount.layer)
+        if let nid = mount.node.id {
+            Self.nodeIndex.removeValue(forKey: nid)
+            disposalBuffer.append(nid)
+        }
         mount.layer.removeFromSuperlayer()
         mount.virtualListView?.removeFromSuperview()
         mount.virtualListView = nil

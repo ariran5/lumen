@@ -101,6 +101,8 @@ private struct StartPage: View {
         ("Scroll Lab — scroll + safe-area", "http://192.168.0.108:8084"),
         ("Input Lab — TextInput",       "http://192.168.0.108:8085"),
         ("Sheet Lab — bottomSheet",     "http://192.168.0.108:8086"),
+        ("Bank Lab — full app demo",    "http://192.168.0.108:8087"),
+        ("History — built-in fast-app", "lumen://history"),
         ("Hacker News (web fallback)",  "https://news.ycombinator.com"),
     ]
 

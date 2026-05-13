@@ -41,6 +41,15 @@ final class TabModel: Identifiable {
         guard let url = Self.normalize(addressInput) else { return }
         addressInput = url.absoluteString
 
+        // Внутренние lumen:// страницы (history, settings, ...) грузим как
+        // fast-app сразу, без probe и без записи в историю.
+        if url.scheme == "lumen" {
+            mode = .fastApp(url)
+            return
+        }
+
+        HistoryStore.shared.record(url: url, title: pageTitle)
+
         let host = url.host ?? url.absoluteString
 
         // Cache hit — мгновенное решение.

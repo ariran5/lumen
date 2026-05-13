@@ -19,7 +19,16 @@ final class BottomSheetViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = UIColor(red: 0.08, green: 0.08, blue: 0.10, alpha: 1)
+        // iOS 26: НЕ ставим backgroundColor — система сама накладывает
+        // Liquid Glass на sheet container. Любой свой непрозрачный фон
+        // даст артефакт-rim по краям (известная проблема).
+        // Стиль (light/dark) наследуем от системы, чтобы Glass совпадал
+        // с цветовой схемой приложения.
+        if #available(iOS 26.0, *) {
+            view.backgroundColor = .clear
+        } else {
+            view.backgroundColor = .systemBackground
+        }
 
         let host = UIView()
         host.translatesAutoresizingMaskIntoConstraints = false

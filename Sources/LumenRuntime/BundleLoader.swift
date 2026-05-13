@@ -80,6 +80,7 @@ final class BundleProbeCache {
 
 enum BundleLoader {
     static func probe(url: URL) async -> BundleProbe {
+        if url.scheme == "lumen" { return .fastApp }
         let manifestURL = url.appendingPathComponent(".well-known/lumen.json")
         var req = URLRequest(url: manifestURL)
         req.timeoutInterval = 3
@@ -97,6 +98,9 @@ enum BundleLoader {
     }
 
     static func load(from root: URL) async throws -> LumenBundle {
+        if root.scheme == "lumen" {
+            return try loadBuiltin(url: root)
+        }
         let manifestURL = root.appendingPathComponent(".well-known/lumen.json")
         var req = URLRequest(url: manifestURL)
         req.timeoutInterval = 5
@@ -128,6 +132,22 @@ enum BundleLoader {
         }
 
         return LumenBundle(manifest: manifest, script: script, origin: root)
+    }
+
+    private static func loadBuiltin(url: URL) throws -> LumenBundle {
+        guard let host = url.host,
+              let script = BuiltinFastApps.script(for: host) else {
+            throw BundleLoadError.invalidRoot
+        }
+        let name = BuiltinFastApps.displayName(for: host) ?? host
+        let manifest = LumenManifest(
+            name: name,
+            version: "0",
+            entry: "inline",
+            minRuntime: nil,
+            dev: false
+        )
+        return LumenBundle(manifest: manifest, script: script, origin: url)
     }
 
     private static func resolveEntry(_ entry: String, root: URL, manifestURL: URL) -> URL {

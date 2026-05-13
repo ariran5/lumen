@@ -1,8 +1,10 @@
-// HN reader на @lumen/core (Flutter-style + signals)
+// HN reader — Vapor-style миграция.
 //
-// Главное отличие от прошлой версии: state хранится в signals,
-// при изменении любого state mount() сам триггерит re-render через
-// reconciler. Никаких ручных listHandle.reload() — фреймворк сам.
+// До: VirtualList(count, render) + visitedRev hack для invalidation.
+//     Каждый visited.set → mount re-run → 30 row rebuilds.
+// После: ScrollView + Slot для списка, per-row opacity thunk, header
+//     counter thunk. visitedRev убран — теперь visited signal,
+//     row подписан только на свой бит через thunk.
 
 const HN = 'https://hacker-news.firebaseio.com/v0'
 
@@ -19,7 +21,17 @@ interface Story {
 
 const stories = signal<Story[]>([])
 const placeholder = signal('Fetching top stories…')
-const visitedRev = signal(0)   // increments on visited.set to invalidate list
+
+// Object а не Set: Set.add мутирует in-place, signal не выстрелит.
+// Запись `{...visited.value, [id]: true}` создаёт новую ссылку → fire.
+function loadVisited(): {[id: string]: boolean} {
+  const out: {[id: string]: boolean} = {}
+  for (const k of lumen.storage.keys()) {
+    if (k.indexOf('visited.') === 0) out[k.slice(8)] = true
+  }
+  return out
+}
+const visited = signal<{[id: string]: boolean}>(loadVisited())
 
 lumen.bench.showFPS(true)
 
@@ -28,25 +40,18 @@ mount(App)
 // ─── App tree ───────────────────────────────────────────────────
 
 function App() {
-  if (stories.value.length === 0) {
-    return View({flex: 1, padding: 32, gap: 12, backgroundColor: '#0F0F12'},
-      Text({fontSize: 28, fontWeight: '700', color: '#FFFFFF'}, 'Hacker News'),
-      Text({fontSize: 14, color: '#9CA3AF'}, placeholder.value),
-    )
-  }
   return View({flex: 1, backgroundColor: '#0F0F12'},
     Header(),
-    VirtualList({
-      flex: 1,
-      count: stories.value.length,
-      itemHeight: 88,
-      render: renderRow,
-    }),
+    // Slot — реактивный switch placeholder ↔ list. Mount-effect
+    // НЕ читает stories.value в body, только thunk; mount запускается
+    // ровно один раз.
+    Slot({flex: 1},
+      () => stories.value.length === 0 ? Placeholder() : List()
+    ),
   )
 }
 
 function Header() {
-  visitedRev.value  // subscribe — каждый visited.set триггерит обновление header
   return View({
     flexDirection: 'row',
     alignItems: 'center',
@@ -54,8 +59,9 @@ function Header() {
     gap: 10,
     backgroundColor: '#15151A',
   },
+    // Per-prop thunk: только этот Text патчится когда stories.length меняется.
     Text({flex: 1, fontSize: 14, fontWeight: '600', color: '#10B981'},
-      '✅ HMR live · ' + stories.value.length + ' stories'),
+      () => '✅ HMR live · ' + stories.value.length + ' stories'),
     Pressable({
       onTap: clearVisited,
       paddingTop: 5, paddingRight: 10, paddingBottom: 5, paddingLeft: 10,
@@ -67,17 +73,38 @@ function Header() {
   )
 }
 
-function renderRow(i: number) {
-  const s = stories.value[i]
-  const visited = lumen.storage.get('visited.' + s.id) === '1'
+function Placeholder() {
+  return View({flex: 1, padding: 32, gap: 12},
+    Text({fontSize: 28, fontWeight: '700', color: '#FFFFFF'}, 'Hacker News'),
+    Text({fontSize: 14, color: '#9CA3AF'}, () => placeholder.value),
+  )
+}
+
+function List() {
+  return ScrollView({
+    flex: 1,
+    paddingBottom: lumen.safeArea.bottom,
+  },
+    // Slot — реактивный список. Effect срабатывает на stories.value
+    // (load complete). На изменение visited не дёргается — opacity thunk
+    // живёт в Row и подписывается отдельно.
+    Slot({}, () => stories.value.map(Row)),
+  )
+}
+
+function Row(s: Story, i: number) {
   return Pressable({
+    key: String(s.id),
     onTap: () => openStory(s),
     flexDirection: 'row',
     padding: 14,
     gap: 12,
     height: 88,
     backgroundColor: i % 2 === 0 ? '#15151A' : '#1A1A20',
-    opacity: visited ? 0.55 : 1,
+    // Per-row opacity thunk: подписан только на visited.value.
+    // 30 rows × 1 effect = 30 patch calls per visited mutation,
+    // mount/slot НЕ дёргаются.
+    opacity: () => visited.value[s.id] ? 0.55 : 1,
   },
     View({width: 32, height: 32, borderRadius: 8, backgroundColor: '#27272F', padding: 4},
       s.hostname ? Image({flex: 1, contentMode: 'contain', source: faviconURL(s.hostname)}) : null,
@@ -96,7 +123,7 @@ function renderRow(i: number) {
 function openStory(s: Story) {
   lumen.haptics('light')
   lumen.storage.set('visited.' + s.id, '1')
-  visitedRev.value++   // триггерит App re-render → VirtualList reload
+  visited.value = {...visited.value, [s.id]: true}
   lumen.router.push({
     title: s.hostname || 'Story',
     render: () => renderStoryDetail(s),
@@ -107,7 +134,7 @@ function openStory(s: Story) {
 function clearVisited() {
   lumen.haptics('light')
   lumen.storage.clear()
-  visitedRev.value++
+  visited.value = {}
 }
 
 // ─── detail / comments pages ───────────────────────────────────
@@ -154,8 +181,6 @@ function renderStoryDetail(s: Story) {
   )
 }
 
-// Native UISheetPresentationController c Lumen-рендерёным содержимым.
-// Тап на "Open article" → выезжает sheet с дополнительными действиями.
 function openShareSheet(s: Story) {
   lumen.haptics('success')
   lumen.bottomSheet({

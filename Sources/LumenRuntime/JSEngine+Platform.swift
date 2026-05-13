@@ -38,6 +38,9 @@ extension JSEngine {
         installBenchBridge()
         installAnimationBridge()
         installSafeAreaBridge()
+        installPatchBridge()
+        installNotifyBridge()
+        installHistoryBridge()
     }
 
     private func installBottomSheet() {
@@ -81,7 +84,7 @@ extension JSEngine {
             default:
                 sheet.detents = [.medium(), .large()]
             }
-            sheet.prefersGrabberVisible = true
+            sheet.prefersGrabberVisible = false
             sheet.preferredCornerRadius = 24
         }
 

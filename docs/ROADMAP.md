@@ -51,6 +51,11 @@
 | P5.4 | `Blur` + `Glass` (iOS 26 Liquid Glass через UIGlassEffect, fallback на UIBlurEffect) | GlassLab — sticky pill поверх скроллящихся stripes ✓ |
 | P5.5 | `position: absolute` + `top/right/bottom/left` в FlexLayout | sticky overlay поверх ScrollView ✓ |
 | P5.6 | `Image` принимает children (overlay поверх backdrop'а) | — |
+| P5.7 | `TabsStore` (`@Observable` singleton) + multi-tab BrowserView + `lumen.tabs.*` JS API | TabsLab demo + tab-strip в shell ✓ |
+| P5.8 | `onScroll` event на ScrollView (offset/viewport/contentHeight) | ScrollLab sticky overlay по offset ✓ |
+| P6.1 | EffectScope в CoreFramework | scope.dispose() cascades child effects ✓ |
+| P6.2 | Builders разделяют style/bindings (function → thunk-binding) | `View({opacity: () => sig.value})` ✓ |
+| P6.3 | `lumen._patchProp(id, key, value)` + JS-side `registerBindings(tree)` per-prop effects | ScrollLab: 150 r/s → ~2 r/s (Vapor-style win) ✓ |
 
 ### Архитектурные решения, зафиксированные по дороге
 

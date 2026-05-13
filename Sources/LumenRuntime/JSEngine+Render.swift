@@ -18,5 +18,17 @@ extension JSEngine {
             }
         }
         lumen.setObject(render, forKeyedSubscript: "render" as NSString)
+
+        // Per-node EffectScope cleanup: после reconcile рендерер batch'ит
+        // снятые с маунта ids и пушит их в JS, который dispose'ит их
+        // scope'ы. Без этого orphan effect'ы продолжали бы патчить layer'ы
+        // по уже мёртвым id'шникам.
+        renderer.onNodesDisposed = { [weak self] ids in
+            guard let self else { return }
+            guard let lumen = self.context.objectForKeyedSubscript("lumen"),
+                  let dispose = lumen.objectForKeyedSubscript("_disposeNodes"),
+                  !dispose.isUndefined else { return }
+            _ = dispose.call(withArguments: [ids])
+        }
     }
 }

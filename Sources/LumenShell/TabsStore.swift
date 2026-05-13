@@ -17,10 +17,57 @@ final class TabsStore {
     private(set) var tabs: [TabModel] = []
     var activeID: UUID?
 
+    /// Дебаунс: несколько свойств меняющихся в одной runloop-итерации
+    /// должны дать ОДИН fire("tabs"), а не N.
+    @ObservationIgnored private var rebroadcastScheduled = false
+
     init() {
         let first = TabModel()
         tabs = [first]
         activeID = first.id
+        startBroadcast()
+    }
+
+    /// Авто-broadcast в JS-канал 'tabs' через Observation. Любое изменение
+    /// tabs/activeID/title/loading/URL у любой таб → fire("tabs") → все
+    /// fast-app'ы с `lumen.tabs.subscribe(...)` получают callback.
+    /// После каждого срабатывания re-arm'ится.
+    private func startBroadcast() {
+        withObservationTracking { [weak self] in
+            guard let self else { return }
+            _ = self.tabs.count
+            _ = self.activeID
+            for tab in self.tabs {
+                _ = tab.displayTitle
+                _ = tab.isLoading
+                _ = tab.currentURL
+            }
+        } onChange: { [weak self] in
+            // onChange может быть Sendable closure; но фактически он зовётся
+            // synchronously внутри мутации, которая идёт на MainActor.
+            MainActor.assumeIsolated {
+                guard let self, !self.rebroadcastScheduled else { return }
+                self.rebroadcastScheduled = true
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.rebroadcastScheduled = false
+                    // Title визита приходит ПОЗЖЕ commit() (после загрузки страницы).
+                    // Каждый tabs-broadcast — точка где можно докинуть title в
+                    // history-запись. updateTitle идемпотентен: если у entry уже
+                    // есть title, no-op.
+                    for tab in self.tabs {
+                        if !tab.pageTitle.isEmpty, let url = tab.currentURL {
+                            HistoryStore.shared.updateTitle(
+                                forURL: url.absoluteString,
+                                title: tab.pageTitle
+                            )
+                        }
+                    }
+                    NativeNotifier.shared.fire("tabs")
+                    self.startBroadcast()
+                }
+            }
+        }
     }
 
     var activeTab: TabModel? {

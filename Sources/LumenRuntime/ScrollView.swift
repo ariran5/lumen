@@ -31,6 +31,24 @@ final class LumenScrollView: UIScrollView, UIScrollViewDelegate {
         showsHorizontalScrollIndicator = false
         delegate = self
         addSubview(contentView)
+        // Slot-thunk внутри scroll-контента может изменить число детей —
+        // renderer.replaceChildren запустит relayout() и дёрнет onAfterLayout,
+        // тут пересчитаем contentSize.
+        self.renderer.onAfterLayout = { [weak self] in
+            self?.resyncContentSize()
+        }
+    }
+
+    private func resyncContentSize() {
+        guard bounds.width > 0 else { return }
+        let height = max(0, renderer.computedContentHeight())
+        let newSize = CGSize(width: bounds.width, height: max(height, bounds.height))
+        if contentView.frame.size != newSize {
+            contentView.frame = CGRect(origin: .zero, size: newSize)
+        }
+        if contentSize != newSize {
+            contentSize = newSize
+        }
     }
 
     // Fires часто (per-frame во время scroll). Если JS handler тяжёлый,

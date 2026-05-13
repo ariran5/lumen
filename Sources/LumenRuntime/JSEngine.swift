@@ -19,6 +19,12 @@ final class JSEngine {
 
     private var lastException: String?
 
+    // Native→JS push-канал. Каждый канал — массив `(id, managed callback)`.
+    // JSManagedValue нужен чтобы JSC GC мог собрать callback когда движок
+    // умер; обычный JSValue даст retain-cycle JS↔Swift.
+    var notifyListeners: [String: [(Int, JSManagedValue)]] = [:]
+    private var nextListenerID: Int = 0
+
     init() {
         guard let ctx = JSContext() else {
             fatalError("Failed to create JSContext")
@@ -30,11 +36,25 @@ final class JSEngine {
         installConsole()
         installGlobals()
 
+        NativeNotifier.shared.register(self)
+
         #if DEBUG
         if #available(iOS 16.4, *) {
             context.isInspectable = true
         }
         #endif
+    }
+
+    func nextNotifyID() -> Int {
+        nextListenerID += 1
+        return nextListenerID
+    }
+
+    func dispatchNotify(channel: String) {
+        guard let arr = notifyListeners[channel] else { return }
+        for (_, mv) in arr {
+            _ = mv.value?.call(withArguments: [])
+        }
     }
 
     @discardableResult
