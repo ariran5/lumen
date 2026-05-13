@@ -34,6 +34,10 @@ extension JSEngine {
         installHaptics()
         installTimers()
         installFetchBridge()
+        installStorageBridge()
+        installBenchBridge()
+        installAnimationBridge()
+        installSafeAreaBridge()
     }
 
     private func installBottomSheet() {

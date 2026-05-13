@@ -5,9 +5,10 @@ struct LumenManifest: Decodable, Sendable {
     let version: String
     let entry: String
     let minRuntime: String?
+    let dev: Bool?
 
     enum CodingKeys: String, CodingKey {
-        case name, version, entry
+        case name, version, entry, dev
         case minRuntime = "min_runtime"
     }
 }
@@ -41,9 +42,40 @@ enum BundleLoadError: LocalizedError {
     }
 }
 
-enum BundleProbe: Sendable {
+enum BundleProbe: Sendable, Equatable {
     case fastApp
     case web
+}
+
+/// Per-host TTL-кэш probe-результата. Чтобы не дёргать `/.well-known/lumen.json`
+/// при каждом visit известного хоста.
+@MainActor
+final class BundleProbeCache {
+    static let shared = BundleProbeCache()
+
+    private struct Entry {
+        let result: BundleProbe
+        let timestamp: Date
+    }
+
+    private var entries: [String: Entry] = [:]
+    private let ttl: TimeInterval = 86_400  // 24 часа
+
+    func get(host: String) -> BundleProbe? {
+        guard let entry = entries[host],
+              Date().timeIntervalSince(entry.timestamp) < ttl else {
+            return nil
+        }
+        return entry.result
+    }
+
+    func set(host: String, _ result: BundleProbe) {
+        entries[host] = Entry(result: result, timestamp: Date())
+    }
+
+    func invalidate(host: String) {
+        entries.removeValue(forKey: host)
+    }
 }
 
 enum BundleLoader {

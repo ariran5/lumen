@@ -4,9 +4,11 @@ import UIKit
 
 @MainActor
 final class VirtualListController {
-    let count: Int
-    let itemHeight: CGFloat
-    let renderFn: JSValue
+    var count: Int
+    var itemHeight: CGFloat
+    var renderFn: JSValue
+
+    weak var view: VirtualListView?
 
     private(set) var lastJSMs: Double = 0
     private(set) var lastParseMs: Double = 0
@@ -16,6 +18,32 @@ final class VirtualListController {
         self.count = count
         self.itemHeight = itemHeight
         self.renderFn = renderFn
+    }
+
+    /// Перерендерить видимые ячейки. cellForItemAt дёрнет JS-`render(i)`
+    /// заново; renderer внутри ячейки применит дельту через reconciler,
+    /// не пересоздавая CALayer'ы.
+    func reload() {
+        view?.collectionView.reloadData()
+    }
+
+    /// Применить новые значения из дерева. Если изменились `count` или
+    /// `itemHeight` — invalidate layout и reload.
+    func update(count: Int, itemHeight: CGFloat, renderFn: JSValue) {
+        let countChanged = self.count != count
+        let heightChanged = self.itemHeight != itemHeight
+        self.count = count
+        self.itemHeight = itemHeight
+        self.renderFn = renderFn
+        if heightChanged {
+            view?.applyItemHeight(itemHeight)
+        }
+        if countChanged || heightChanged {
+            view?.collectionView.reloadData()
+        } else {
+            // ту же длину просто перерисуем (вдруг render-функция вернёт другой контент)
+            view?.collectionView.reloadData()
+        }
     }
 
     func render(at index: Int) -> RenderNode? {
@@ -53,10 +81,8 @@ final class LumenCell: UICollectionViewCell {
         }
     }
 
-    override func prepareForReuse() {
-        super.prepareForReuse()
-        contentView.layer.sublayers?.forEach { $0.removeFromSuperlayer() }
-    }
+    // prepareForReuse не нужен: на следующий render renderer сам сделает
+    // diff с прошлым деревом ячейки и применит дельту без флэша.
 }
 
 final class VirtualListView: UIView, UICollectionViewDataSource, UICollectionViewDelegate {
@@ -81,11 +107,14 @@ final class VirtualListView: UIView, UICollectionViewDataSource, UICollectionVie
         self.collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
         super.init(frame: frame)
 
+        controller.view = self
+
         collectionView.backgroundColor = UIColor(red: 0.06, green: 0.06, blue: 0.07, alpha: 1)
         collectionView.dataSource = self
         collectionView.delegate = self
         collectionView.register(LumenCell.self, forCellWithReuseIdentifier: LumenCell.reuseID)
         collectionView.contentInsetAdjustmentBehavior = .never
+        collectionView.frame = bounds
         addSubview(collectionView)
     }
 
@@ -101,6 +130,13 @@ final class VirtualListView: UIView, UICollectionViewDataSource, UICollectionVie
                 layout.itemSize = newSize
                 layout.invalidateLayout()
             }
+        }
+    }
+
+    func applyItemHeight(_ height: CGFloat) {
+        if let layout = collectionView.collectionViewLayout as? UICollectionViewFlowLayout {
+            layout.itemSize = CGSize(width: max(1, bounds.width), height: height)
+            layout.invalidateLayout()
         }
     }
 
@@ -157,12 +193,15 @@ final class VirtualListView: UIView, UICollectionViewDataSource, UICollectionVie
     nonisolated func collectionView(_ collectionView: UICollectionView,
                                     cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         MainActor.assumeIsolated {
+            let t0 = CFAbsoluteTimeGetCurrent()
             let cell = collectionView.dequeueReusableCell(
                 withReuseIdentifier: LumenCell.reuseID, for: indexPath
             ) as! LumenCell
             if let tree = controller.render(at: indexPath.item) {
                 cell.render(tree: tree)
             }
+            let elapsed = (CFAbsoluteTimeGetCurrent() - t0) * 1000
+            RenderMetrics.shared.record(elapsed)
             return cell
         }
     }

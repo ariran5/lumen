@@ -9,13 +9,21 @@ enum TabMode: Equatable {
 
 @MainActor
 @Observable
-final class TabModel {
+final class TabModel: Identifiable {
+    let id: UUID = UUID()
     var addressInput: String = ""
     var mode: TabMode = .start
     var isLoading: Bool = false
     var pageTitle: String = ""
     var canGoBack: Bool = false
     var canGoForward: Bool = false
+
+    /// Short display title — fallback chain: pageTitle > host > "New Tab".
+    var displayTitle: String {
+        if !pageTitle.isEmpty { return pageTitle }
+        if let host = currentURL?.host { return host }
+        return "New Tab"
+    }
 
     var currentURL: URL? {
         switch mode {
@@ -33,14 +41,31 @@ final class TabModel {
         guard let url = Self.normalize(addressInput) else { return }
         addressInput = url.absoluteString
 
-        Task {
+        let host = url.host ?? url.absoluteString
+
+        // Cache hit — мгновенное решение.
+        if let cached = BundleProbeCache.shared.get(host: host) {
+            switch cached {
+            case .fastApp: mode = .fastApp(url)
+            case .web: mode = .web(url)
+            }
+            return
+        }
+
+        // Cache miss: оптимистично запускаем WebView (загрузка идёт параллельно),
+        // probe — в фоне с таймаутом. Если manifest найден до того как
+        // пользователь ушёл с этой страницы → swap на FastApp.
+        mode = .web(url)
+
+        Task { [weak self] in
             let detection = await BundleLoader.probe(url: url)
             await MainActor.run {
-                switch detection {
-                case .fastApp:
+                BundleProbeCache.shared.set(host: host, detection)
+                guard let self else { return }
+                // Применяем swap только если пользователь всё ещё на том же URL.
+                guard case .web(let currentURL) = self.mode, currentURL == url else { return }
+                if detection == .fastApp {
                     self.mode = .fastApp(url)
-                case .web:
-                    self.mode = .web(url)
                 }
             }
         }

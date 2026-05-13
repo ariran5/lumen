@@ -144,4 +144,82 @@ final class FlexLayoutTests: XCTestCase {
         XCTAssertEqual(side.frame,    CGRect(x: 0,  y: 60,  width: 80,  height: 240))
         XCTAssertEqual(content.frame, CGRect(x: 80, y: 60,  width: 320, height: 240))
     }
+
+    // MARK: - Intrinsic sizing (shrink-to-fit, P2.3)
+
+    func testIntrinsicRowFromChildren() {
+        // Контейнер без явной width должен взять size из детей + padding + gap.
+        // Parent с alignItems=.start, иначе по CSS-default stretch растянет cross.
+        var rs = FlexStyle()
+        rs.direction = .row
+        rs.padding = FlexInsets(uniform: 8)
+        rs.gap = 6
+        let r = FlexNode(style: rs)
+
+        var a = FlexStyle(); a.width = .points(30); a.height = .points(40)
+        var b = FlexStyle(); b.width = .points(50); b.height = .points(20)
+        r.add(FlexNode(style: a))
+        r.add(FlexNode(style: b))
+
+        var parentStyle = FlexStyle()
+        parentStyle.direction = .row
+        parentStyle.alignItems = .start
+        let parent = FlexNode(style: parentStyle)
+        parent.add(r)
+        parent.calculateLayout(width: 500, height: 200)
+
+        // r main = 30 + 6 + 50 + pad.left + pad.right = 30 + 6 + 50 + 16 = 102
+        // r cross = max(40, 20) + pad.top + pad.bottom = 40 + 16 = 56
+        XCTAssertEqual(r.frame.width, 102, accuracy: 0.5)
+        XCTAssertEqual(r.frame.height, 56, accuracy: 0.5)
+    }
+
+    func testIntrinsicColumnFromChildren() {
+        var ps = FlexStyle()
+        ps.direction = .row
+        ps.alignItems = .start
+        let parent = FlexNode(style: ps)
+
+        var cs = FlexStyle()
+        cs.direction = .column
+        cs.gap = 4
+        let col = FlexNode(style: cs)
+
+        var a = FlexStyle(); a.width = .points(80); a.height = .points(15)
+        var b = FlexStyle(); b.width = .points(60); b.height = .points(25)
+        col.add(FlexNode(style: a))
+        col.add(FlexNode(style: b))
+        parent.add(col)
+
+        parent.calculateLayout(width: 400, height: 200)
+
+        // col width = max(80, 60) = 80
+        // col height = 15 + 4 + 25 = 44
+        XCTAssertEqual(col.frame.width, 80, accuracy: 0.5)
+        XCTAssertEqual(col.frame.height, 44, accuracy: 0.5)
+    }
+
+    func testIntrinsicWithTextMeasure() {
+        // Контейнер с одним text leaf-ом — должен заиметь size от measure.
+        var ps = FlexStyle()
+        ps.direction = .row
+        ps.alignItems = .start
+        let parent = FlexNode(style: ps)
+
+        var ws = FlexStyle()
+        ws.padding = FlexInsets(uniform: 4)
+        let wrapper = FlexNode(style: ws)
+
+        let text = FlexNode(style: FlexStyle())
+        text.measure = { _ in CGSize(width: 90, height: 18) }
+        wrapper.add(text)
+        parent.add(wrapper)
+
+        parent.calculateLayout(width: 500, height: 200)
+
+        // wrapper.height = 18 + 4 + 4 = 26 (column default direction)
+        // wrapper.width = 90 + 4 + 4 = 98
+        XCTAssertEqual(wrapper.frame.width, 98, accuracy: 0.5)
+        XCTAssertEqual(wrapper.frame.height, 26, accuracy: 0.5)
+    }
 }

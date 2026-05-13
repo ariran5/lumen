@@ -4,7 +4,7 @@ import JavaScriptCore
 
 struct RenderNode {
     enum Kind: String {
-        case view, text, image, scroll, pressable
+        case view, text, image, scroll, pressable, virtualList, textInput, blur
     }
 
     var kind: Kind = .view
@@ -12,9 +12,46 @@ struct RenderNode {
     var style: ViewStyle = ViewStyle()
     var text: String?
     var source: String?
-    var onTap: JSValue?
     var children: [RenderNode] = []
+
+    // Gestures
+    var onTap: JSValue?
+    var onDoubleTap: JSValue?
+    var onLongPress: JSValue?
+    var onPan: JSValue?
+    var onSwipe: JSValue?
+    var onPinch: JSValue?
+    var onRotate: JSValue?
+
+    // virtualList-specific
+    var listCount: Int = 0
+    var listItemHeight: CGFloat = 50
+    var listRenderFn: JSValue?
+
+    // textInput-specific
+    var inputValue: String = ""
+    var inputPlaceholder: String?
+    var inputKeyboardType: String?
+    var inputReturnKey: String?
+    var inputAutocapitalize: String?
+    var inputAutocorrect: Bool?
+    var inputSecure: Bool?
+    var onInputChange: JSValue?
+    var onInputSubmit: JSValue?
+    var onInputFocus: JSValue?
+    var onInputBlur: JSValue?
+
+    // blur-specific
+    var blurIntensity: String = "regular"
+
+    // scroll-specific
+    var onScroll: JSValue?
 }
+
+private let gestureProps = [
+    "onTap", "onDoubleTap", "onLongPress",
+    "onPan", "onSwipe", "onPinch", "onRotate",
+]
 
 extension RenderNode {
     static func parse(_ value: JSValue) -> RenderNode? {
@@ -42,10 +79,69 @@ extension RenderNode {
         if let src = string(value, "source") {
             node.source = src
         }
-        if let onTapVal = subscript_(value, "onTap"),
-           onTapVal.isObject {
-            node.onTap = onTapVal
+        for name in gestureProps {
+            if let v = subscript_(value, name), v.isObject {
+                switch name {
+                case "onTap": node.onTap = v
+                case "onDoubleTap": node.onDoubleTap = v
+                case "onLongPress": node.onLongPress = v
+                case "onPan": node.onPan = v
+                case "onSwipe": node.onSwipe = v
+                case "onPinch": node.onPinch = v
+                case "onRotate": node.onRotate = v
+                default: break
+                }
+            }
         }
+
+        if node.kind == .virtualList {
+            if let countVal = subscript_(value, "count") {
+                node.listCount = Int(countVal.toInt32())
+            }
+            if let heightVal = subscript_(value, "itemHeight") {
+                node.listItemHeight = CGFloat(heightVal.toDouble())
+            }
+            if let renderVal = subscript_(value, "render"), renderVal.isObject {
+                node.listRenderFn = renderVal
+            }
+        }
+
+        if node.kind == .blur {
+            if let i = string(value, "intensity") { node.blurIntensity = i }
+        }
+
+        if node.kind == .scroll {
+            if let v = subscript_(value, "onScroll"), v.isObject {
+                node.onScroll = v
+            }
+        }
+
+        if node.kind == .textInput {
+            node.inputValue = string(value, "value") ?? ""
+            node.inputPlaceholder = string(value, "placeholder")
+            node.inputKeyboardType = string(value, "keyboardType")
+            node.inputReturnKey = string(value, "returnKey")
+            node.inputAutocapitalize = string(value, "autocapitalize")
+            if let v = subscript_(value, "autocorrect"), v.isBoolean {
+                node.inputAutocorrect = v.toBool()
+            }
+            if let v = subscript_(value, "secure"), v.isBoolean {
+                node.inputSecure = v.toBool()
+            }
+            if let v = subscript_(value, "onChange"), v.isObject {
+                node.onInputChange = v
+            }
+            if let v = subscript_(value, "onSubmit"), v.isObject {
+                node.onInputSubmit = v
+            }
+            if let v = subscript_(value, "onFocus"), v.isObject {
+                node.onInputFocus = v
+            }
+            if let v = subscript_(value, "onBlur"), v.isObject {
+                node.onInputBlur = v
+            }
+        }
+
         if let childrenVal = subscript_(value, "children"),
            childrenVal.isArray {
             let length = Int(childrenVal.objectForKeyedSubscript("length")?.toInt32() ?? 0)
@@ -93,11 +189,23 @@ extension RenderNode {
         if let v = dict["justifyContent"] as? String { style.flex.justify = parseJustify(v) }
         if let v = dict["alignItems"] as? String { style.flex.alignItems = parseAlign(v) }
 
+        if let v = dict["position"] as? String {
+            style.flex.position = (v == "absolute") ? .absolute : .relative
+        }
+        if let v = doubleValue(dict["top"]) { style.flex.top = v }
+        if let v = doubleValue(dict["right"]) { style.flex.right = v }
+        if let v = doubleValue(dict["bottom"]) { style.flex.bottom = v }
+        if let v = doubleValue(dict["left"]) { style.flex.left = v }
+
         if let v = dict["backgroundColor"] as? String { style.backgroundColor = parseColor(v) }
         if let v = dict["borderColor"] as? String { style.borderColor = parseColor(v) }
         if let v = doubleValue(dict["borderRadius"]) { style.borderRadius = v }
         if let v = doubleValue(dict["borderWidth"]) { style.borderWidth = v }
-        if let v = doubleValue(dict["opacity"]) { style.opacity = v }
+        if let any = dict["opacity"] {
+            let parsed = parseAnimOrDouble(any)
+            style.opacity = parsed.value ?? style.opacity
+            style.opacityAnimId = parsed.animId
+        }
 
         if let v = doubleValue(dict["fontSize"]) { style.fontSize = v }
         if let v = dict["fontWeight"] { style.fontWeight = String(describing: v) }
@@ -109,6 +217,27 @@ extension RenderNode {
 
         if let v = dict["contentMode"] as? String { style.contentMode = v }
 
+        if let t = dict["transform"] as? [String: Any] {
+            let tx = parseAnimOrDouble(t["translateX"])
+            style.transform.translateX = tx.value ?? style.transform.translateX
+            style.transform.translateXAnimId = tx.animId
+            let ty = parseAnimOrDouble(t["translateY"])
+            style.transform.translateY = ty.value ?? style.transform.translateY
+            style.transform.translateYAnimId = ty.animId
+            let s = parseAnimOrDouble(t["scale"])
+            style.transform.scale = s.value ?? style.transform.scale
+            style.transform.scaleAnimId = s.animId
+            let sx = parseAnimOrDouble(t["scaleX"])
+            style.transform.scaleX = sx.value ?? style.transform.scaleX
+            style.transform.scaleXAnimId = sx.animId
+            let sy = parseAnimOrDouble(t["scaleY"])
+            style.transform.scaleY = sy.value ?? style.transform.scaleY
+            style.transform.scaleYAnimId = sy.animId
+            let r = parseAnimOrDouble(t["rotate"])
+            style.transform.rotate = r.value ?? style.transform.rotate
+            style.transform.rotateAnimId = r.animId
+        }
+
         return style
     }
 
@@ -117,6 +246,17 @@ extension RenderNode {
         if let i = any as? Int { return Double(i) }
         if let n = any as? NSNumber { return n.doubleValue }
         return nil
+    }
+
+    /// JS-side AnimatedValue сериализуется как `{__anim: id, ...}`.
+    /// Этот хелпер унифицирует: число → (value, nil); animated → (nil, animId).
+    private static func parseAnimOrDouble(_ any: Any?) -> (value: Double?, animId: Int?) {
+        if let d = doubleValue(any) { return (d, nil) }
+        if let dict = any as? [String: Any] {
+            if let aid = dict["__anim"] as? Int { return (nil, aid) }
+            if let n = dict["__anim"] as? NSNumber { return (nil, n.intValue) }
+        }
+        return (nil, nil)
     }
 
     private static func parseDimension(_ v: Any) -> FlexDimension {

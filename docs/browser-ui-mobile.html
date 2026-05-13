@@ -1,0 +1,1230 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#0b0b0f" />
+<title>Lumen Mobile — Browser UI Prototype</title>
+<style>
+  :root {
+    --bg-0: #0b0b0f;
+    --bg-1: #111118;
+    --bg-2: #16161f;
+    --surface: rgba(255, 255, 255, 0.05);
+    --surface-hi: rgba(255, 255, 255, 0.09);
+    --border: rgba(255, 255, 255, 0.07);
+    --border-hi: rgba(255, 255, 255, 0.14);
+    --text: #ECECEE;
+    --text-dim: #9A9AA5;
+    --text-soft: #6B6B76;
+    --accent: #B69CFF;
+    --accent-2: #7FB8FF;
+    --ok: #7FE0B0;
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: var(--font);
+    color: var(--text);
+    background:
+      radial-gradient(1400px 900px at 80% -10%, rgba(127, 184, 255, 0.08), transparent 60%),
+      radial-gradient(1100px 800px at -10% 110%, rgba(182, 156, 255, 0.08), transparent 60%),
+      var(--bg-0);
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: -0.01em;
+  }
+
+  /* ----------- Desktop showcase layout ----------- */
+  .showcase {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 60px 24px 80px;
+    gap: 36px;
+  }
+  .showcase h2 {
+    font-size: 14px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-soft);
+    margin: 0;
+  }
+  .stage {
+    display: flex;
+    gap: 28px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .frame-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+  .frame-label {
+    font-size: 12px;
+    color: var(--text-soft);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  /* phone frame */
+  .phone {
+    width: 380px;
+    height: 800px;
+    background: #050507;
+    border-radius: 56px;
+    padding: 12px;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.04),
+      0 2px 0 rgba(255,255,255,0.04) inset,
+      0 30px 80px rgba(0,0,0,0.6),
+      0 0 0 8px #1a1a22;
+    position: relative;
+  }
+  .screen {
+    width: 100%;
+    height: 100%;
+    background: var(--bg-0);
+    border-radius: 44px;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  /* dynamic island */
+  .island {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 110px;
+    height: 32px;
+    background: #000;
+    border-radius: 20px;
+    z-index: 200;
+  }
+
+  /* ================================================
+     iOS 26 — Liquid Glass status bar (floats over content)
+     ================================================ */
+  .status-bar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    padding: 16px 28px 0;
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    height: 54px;
+    align-items: center;
+    z-index: 50;
+    pointer-events: none;
+  }
+  .status-right { display: flex; align-items: center; gap: 5px; }
+  .status-right svg { width: 16px; height: 11px; }
+
+  /* subtle scrim so status icons stay readable on any background */
+  .top-scrim {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 100px;
+    background: linear-gradient(180deg, rgba(0,0,0,0.25), transparent 70%);
+    z-index: 30;
+    pointer-events: none;
+  }
+
+  /* ----- Liquid Glass utilities ----- */
+  .glass {
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05));
+    backdrop-filter: blur(40px) saturate(180%);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    border: 0.5px solid rgba(255,255,255,0.18);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.22),
+      inset 0 -0.5px 0 rgba(255,255,255,0.04),
+      0 12px 32px rgba(0,0,0,0.28),
+      0 1px 2px rgba(0,0,0,0.14);
+  }
+
+  /* a centered floating pill below status bar (page tab indicator) */
+  .top-pill {
+    position: absolute;
+    top: 62px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 8px 7px 14px;
+    border-radius: 999px;
+    max-width: calc(100% - 32px);
+    font-size: 13px;
+    color: var(--text);
+  }
+  .top-pill .lock {
+    color: var(--ok);
+    flex-shrink: 0;
+  }
+  .top-pill .host-name { font-weight: 500; white-space: nowrap; }
+  .pill-btn {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.10);
+    border: 0.5px solid rgba(255,255,255,0.14);
+    display: grid; place-items: center;
+    color: var(--text);
+    flex-shrink: 0;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.15);
+  }
+  .pill-btn.ai {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #0b0b0f;
+    border-color: rgba(255,255,255,0.22);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.4),
+      0 2px 8px rgba(182,156,255,0.4);
+  }
+  .pill-btn svg { width: 13px; height: 13px; }
+
+  /* corner pill (profile, top-right on Home) */
+  .corner-pill {
+    position: absolute;
+    top: 62px;
+    right: 16px;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px 5px 5px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .corner-pill .av {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #B69CFF, #7FB8FF);
+    display: grid; place-items: center;
+    color: #0b0b0f;
+    font-weight: 700;
+    font-size: 11px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.4);
+  }
+
+  /* title pill (top-left on Tabs) */
+  .title-pill {
+    position: absolute;
+    top: 62px;
+    left: 16px;
+    z-index: 60;
+    padding: 8px 18px;
+    border-radius: 22px;
+    display: flex;
+    flex-direction: column;
+  }
+  .title-pill .t {
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+  }
+  .title-pill .s {
+    font-size: 11px;
+    color: var(--text-soft);
+    margin-top: 1px;
+  }
+
+  /* action pill (e.g. close button on tabs) */
+  .action-pill {
+    position: absolute;
+    top: 62px;
+    right: 16px;
+    z-index: 60;
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    color: var(--text);
+  }
+
+  /* ====== shared screen shell ====== */
+  .screen-body {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ========================================
+     1. HOME / NEW TAB
+     ======================================== */
+  .home {
+    flex: 1;
+    overflow-y: auto;
+    padding: 124px 20px 120px;
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+  }
+  .home::-webkit-scrollbar { display: none; }
+  .greeting { }
+  .greeting .hello {
+    font-size: 14px;
+    color: var(--text-soft);
+    margin-bottom: 6px;
+  }
+  .greeting h1 {
+    font-size: 32px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin: 0;
+    line-height: 1.08;
+  }
+  .greeting h1 .grad {
+    background: linear-gradient(135deg, #B69CFF, #7FB8FF);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .home-search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    font-size: 15px;
+    color: var(--text-soft);
+  }
+
+  .section-h {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-soft);
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .section-h .more { color: var(--accent); text-transform: none; letter-spacing: 0; }
+
+  .pins {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  .pin {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .pin-ico {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    display: grid; place-items: center;
+    font-weight: 700;
+    font-size: 18px;
+    color: #fff;
+  }
+  .pin-name {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .pin.gh .pin-ico { background: linear-gradient(135deg, #2a2a35, #1a1a22); color: #ECECEE; }
+  .pin.fg .pin-ico { background: linear-gradient(135deg, #B69CFF, #7FB8FF); }
+  .pin.hn .pin-ico { background: #FF6600; }
+  .pin.tw .pin-ico { background: linear-gradient(135deg, #1a1a1a, #0a0a0a); }
+  .pin.yt .pin-ico { background: linear-gradient(135deg, #FF0033, #B30022); }
+  .pin.no .pin-ico { background: linear-gradient(135deg, #FF9E7F, #FF6F47); }
+  .pin.ar .pin-ico { background: #B31B1B; font-style: italic; font-family: serif; }
+  .pin.tg .pin-ico { background: linear-gradient(135deg, #34a8e8, #1e7eb8); }
+
+  .ai-card {
+    background: linear-gradient(135deg, rgba(182,156,255,0.12), rgba(127,184,255,0.06));
+    border: 1px solid rgba(182,156,255,0.2);
+    border-radius: 16px;
+    padding: 16px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .ai-card .spark {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: grid; place-items: center;
+    flex-shrink: 0;
+    color: #0b0b0f;
+  }
+  .ai-card .body { flex: 1; }
+  .ai-card .ttl { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+  .ai-card .sub { font-size: 12.5px; color: var(--text-dim); line-height: 1.45; }
+
+  .feed-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px;
+    display: flex;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .feed-thumb {
+    width: 64px; height: 64px;
+    border-radius: 10px;
+    flex-shrink: 0;
+    background: linear-gradient(135deg, #2a1f3a, #1a1424);
+    display: grid; place-items: center;
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 18px;
+  }
+  .feed-thumb.b { background: linear-gradient(135deg, #102132, #0a1521); color: var(--accent-2); }
+  .feed-thumb.c { background: linear-gradient(135deg, #2a1414, #1a0a0a); color: #FF9E7F; }
+  .feed-meta { font-size: 11px; color: var(--text-soft); margin-bottom: 4px; }
+  .feed-ttl { font-size: 13.5px; line-height: 1.35; }
+
+  /* ========================================
+     2. PAGE VIEW — full-bleed hero behind status bar
+     ======================================== */
+  .page-wrap {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 0 120px;
+  }
+  .page-wrap::-webkit-scrollbar { display: none; }
+  .page-hero {
+    height: 280px;
+    background:
+      radial-gradient(circle at 30% 30%, rgba(182,156,255,0.5), transparent 55%),
+      radial-gradient(circle at 75% 70%, rgba(127,184,255,0.4), transparent 55%),
+      linear-gradient(135deg, #1a1424, #0f1c2c);
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    padding: 20px 22px 26px;
+  }
+  .page-hero .kicker {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: rgba(255,255,255,0.85);
+    font-weight: 600;
+  }
+  .page-content {
+    padding: 24px 22px 0;
+  }
+  .page-content h1 {
+    font-size: 26px;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    margin: 0 0 14px;
+    font-weight: 600;
+  }
+  .page-content .meta {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    color: var(--text-soft);
+    font-size: 12px;
+    margin-bottom: 22px;
+  }
+  .meta .dot { width: 3px; height: 3px; border-radius: 50%; background: var(--text-soft); }
+  .page-content p {
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--text-dim);
+    margin: 0 0 16px;
+  }
+  .page-content p strong { color: var(--text); font-weight: 500; }
+  .page-quote {
+    margin: 18px 0;
+    padding: 16px 18px;
+    border-left: 2px solid var(--accent);
+    background: rgba(182,156,255,0.06);
+    border-radius: 0 10px 10px 0;
+    font-size: 15.5px;
+    line-height: 1.5;
+    color: var(--text);
+  }
+
+  /* ===== Mobile address bar — Liquid Glass with scroll-aware compact ===== */
+  .addrbar {
+    position: absolute;
+    left: 12px; right: 12px;
+    bottom: 28px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.03));
+    backdrop-filter: blur(50px) saturate(200%);
+    -webkit-backdrop-filter: blur(50px) saturate(200%);
+    border: 0.5px solid rgba(255,255,255,0.22);
+    border-radius: 24px;
+    padding: 9px 11px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.30),
+      inset 0 -0.5px 0 rgba(255,255,255,0.05),
+      inset 1px 0 0 rgba(255,255,255,0.06),
+      inset -1px 0 0 rgba(255,255,255,0.06),
+      0 18px 44px rgba(0,0,0,0.42),
+      0 2px 6px rgba(0,0,0,0.18);
+    transition:
+      left 460ms cubic-bezier(0.32, 0.72, 0, 1),
+      right 460ms cubic-bezier(0.32, 0.72, 0, 1),
+      bottom 460ms cubic-bezier(0.32, 0.72, 0, 1),
+      padding 340ms cubic-bezier(0.32, 0.72, 0, 1),
+      border-radius 340ms cubic-bezier(0.32, 0.72, 0, 1),
+      background 280ms ease,
+      box-shadow 280ms ease;
+  }
+
+  /* compact state — shrinks toward center like Safari */
+  .addrbar.compact {
+    left: 30%;
+    right: 30%;
+    bottom: 30px;
+    padding: 5px 8px;
+    border-radius: 18px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.20),
+      inset 0 -0.5px 0 rgba(255,255,255,0.03),
+      0 10px 24px rgba(0,0,0,0.30);
+  }
+
+  .addr-url {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 14px;
+    padding: 9px 12px;
+    font-size: 13.5px;
+    color: var(--text);
+    overflow: hidden;
+    min-width: 0;
+    transition:
+      background 280ms ease,
+      padding 340ms cubic-bezier(0.32, 0.72, 0, 1),
+      font-size 280ms ease,
+      border-radius 280ms ease;
+  }
+  .addrbar.compact .addr-url {
+    background: transparent;
+    padding: 2px 6px;
+    font-size: 12.5px;
+    border-radius: 0;
+    justify-content: center;
+  }
+
+  .addr-url .lock { color: var(--ok); flex-shrink: 0; }
+  .addr-url .host {
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .addr-url .path { color: var(--text-soft); }
+
+  .addr-btn {
+    width: 36px; height: 36px;
+    border-radius: 12px;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    display: grid; place-items: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    overflow: hidden;
+    transition:
+      width 380ms cubic-bezier(0.32, 0.72, 0, 1),
+      margin 380ms cubic-bezier(0.32, 0.72, 0, 1),
+      opacity 220ms ease 60ms,
+      background 120ms ease;
+  }
+  .addrbar.compact .addr-btn {
+    width: 0;
+    margin: 0 -4px;
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      width 340ms cubic-bezier(0.32, 0.72, 0, 1) 40ms,
+      margin 340ms cubic-bezier(0.32, 0.72, 0, 1) 40ms,
+      opacity 160ms ease;
+  }
+  .addr-btn:active { background: var(--surface-hi); }
+  .addr-btn svg { width: 18px; height: 18px; }
+  .addr-btn.ai {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #0b0b0f;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.4),
+      0 4px 14px rgba(182,156,255,0.4);
+  }
+
+  /* subtle hint when bar is interactive in compact */
+  .addrbar.compact::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(120% 100% at 50% 0%, rgba(255,255,255,0.06), transparent 60%);
+    pointer-events: none;
+  }
+  .home-indicator {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 134px;
+    height: 5px;
+    background: rgba(255,255,255,0.45);
+    border-radius: 3px;
+    z-index: 80;
+  }
+
+  /* ========================================
+     3. TAB SWITCHER
+     ======================================== */
+  .switcher-search {
+    margin: 124px 22px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 11px 14px;
+    font-size: 14px;
+    color: var(--text-soft);
+  }
+  .switcher-tabs {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 16px 120px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    align-content: start;
+  }
+  .switcher-tabs::-webkit-scrollbar { display: none; }
+  .tab-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    aspect-ratio: 3 / 4;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+  .tab-card.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(182,156,255,0.18);
+  }
+  .tab-card .head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    font-size: 11px;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+  }
+  .tab-card .head .favicon {
+    width: 14px; height: 14px;
+    border-radius: 4px;
+    display: grid; place-items: center;
+    font-size: 8px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .fv-hn { background: #FF6600; color: white; }
+  .fv-gh { background: #ECECEE; color: #0b0b0f; }
+  .fv-fg { background: linear-gradient(135deg, #B69CFF, #7FB8FF); color: white; }
+  .fv-arx { background: #B31B1B; color: white; font-style: italic; }
+  .fv-yt { background: #FF0033; color: white; }
+  .fv-tw { background: #000; color: white; }
+  .tab-card .head .host {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tab-card .head .x {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-soft);
+  }
+  .tab-card .preview {
+    flex: 1;
+    padding: 10px 11px;
+    overflow: hidden;
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+  }
+  .tab-card .preview .ttl {
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.3;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .tab-card .preview .body {
+    font-size: 9px;
+    line-height: 1.5;
+    color: var(--text-soft);
+  }
+  .tab-card .preview .bar {
+    height: 5px;
+    background: var(--surface-hi);
+    border-radius: 2px;
+    margin-bottom: 4px;
+  }
+  .tab-card .preview .bar.short { width: 60%; }
+  .tab-card .preview .bar.med   { width: 85%; }
+  .tab-card.hero .preview {
+    background: linear-gradient(135deg, rgba(182,156,255,0.18), rgba(127,184,255,0.08));
+  }
+  .tab-card.hero2 .preview {
+    background: linear-gradient(135deg, rgba(255,158,127,0.2), rgba(255,99,71,0.05));
+  }
+  .tab-card.hero3 .preview {
+    background: linear-gradient(180deg, #1a1f2e, #0f1219);
+  }
+
+  /* switcher bottom bar — same Liquid Glass */
+  .switcher-foot {
+    position: absolute;
+    left: 12px; right: 12px;
+    bottom: 28px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.03));
+    backdrop-filter: blur(50px) saturate(200%);
+    -webkit-backdrop-filter: blur(50px) saturate(200%);
+    border: 0.5px solid rgba(255,255,255,0.22);
+    border-radius: 24px;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.30),
+      inset 0 -0.5px 0 rgba(255,255,255,0.05),
+      inset 1px 0 0 rgba(255,255,255,0.06),
+      inset -1px 0 0 rgba(255,255,255,0.06),
+      0 18px 44px rgba(0,0,0,0.42),
+      0 2px 6px rgba(0,0,0,0.18);
+    transition:
+      left 460ms cubic-bezier(0.32, 0.72, 0, 1),
+      right 460ms cubic-bezier(0.32, 0.72, 0, 1),
+      padding 340ms cubic-bezier(0.32, 0.72, 0, 1),
+      border-radius 340ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .switcher-foot.compact {
+    left: 38%; right: 38%;
+    padding: 6px 8px;
+    border-radius: 18px;
+  }
+  .switcher-foot .sf-btn {
+    transition:
+      width 380ms cubic-bezier(0.32, 0.72, 0, 1),
+      flex 380ms cubic-bezier(0.32, 0.72, 0, 1),
+      opacity 200ms ease,
+      margin 340ms cubic-bezier(0.32, 0.72, 0, 1);
+    overflow: hidden;
+  }
+  .switcher-foot.compact .sf-btn:not(.primary),
+  .switcher-foot.compact .sf-divider {
+    flex: 0;
+    width: 0;
+    margin: 0 -3px;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .sf-btn {
+    flex: 1;
+    height: 40px;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    border-radius: 14px;
+    display: grid; place-items: center;
+  }
+  .sf-btn.primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #0b0b0f;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.4),
+      0 4px 14px rgba(182,156,255,0.4);
+  }
+  .sf-btn svg { width: 18px; height: 18px; }
+  .sf-divider { width: 1px; height: 24px; background: var(--border); }
+
+  /* ============ Responsive (real phone) ============ */
+  @media (max-width: 760px) {
+    body { background: var(--bg-0); }
+    .showcase {
+      padding: 0;
+      min-height: 100vh;
+    }
+    .showcase > h2, .frame-label { display: none; }
+    .stage {
+      gap: 0;
+      flex-direction: column;
+      width: 100vw;
+      height: 100vh;
+    }
+    .frame-wrap { width: 100%; height: 100vh; display: none; }
+    .frame-wrap.live { display: flex; }
+    .phone {
+      width: 100vw;
+      height: 100vh;
+      padding: 0;
+      border-radius: 0;
+      box-shadow: none;
+      background: var(--bg-0);
+    }
+    .screen { border-radius: 0; }
+    .island { display: none; }
+    .status-bar { padding-top: env(safe-area-inset-top, 14px); }
+    .addrbar, .switcher-foot { bottom: max(20px, env(safe-area-inset-bottom, 20px)); }
+    .home-indicator { display: none; }
+
+    .mobile-tabs {
+      position: fixed;
+      top: env(safe-area-inset-top, 12px);
+      right: 12px;
+      z-index: 300;
+      display: flex;
+      gap: 4px;
+      background: rgba(17,17,24,0.7);
+      backdrop-filter: blur(30px) saturate(180%);
+      border: 0.5px solid rgba(255,255,255,0.18);
+      border-radius: 10px;
+      padding: 4px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.2);
+    }
+    .mobile-tabs button {
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 7px;
+      font-family: inherit;
+    }
+    .mobile-tabs button.on {
+      background: var(--surface-hi);
+      color: var(--text);
+    }
+  }
+  .mobile-tabs { display: none; }
+  @media (max-width: 760px) {
+    .mobile-tabs { display: flex; }
+  }
+</style>
+</head>
+<body>
+
+<div class="mobile-tabs">
+  <button class="on" onclick="showState(0)">Home</button>
+  <button onclick="showState(1)">Page</button>
+  <button onclick="showState(2)">Tabs</button>
+</div>
+
+<div class="showcase">
+  <h2>Lumen Mobile · iOS 26 Liquid Glass</h2>
+
+  <div class="stage">
+
+    <!-- ============ HOME ============ -->
+    <div class="frame-wrap live" data-state="0">
+      <div class="phone">
+        <div class="screen">
+          <div class="island"></div>
+          <div class="top-scrim"></div>
+          <div class="status-bar">
+            <span>9:41</span>
+            <div class="status-right">
+              <svg viewBox="0 0 16 11" fill="currentColor"><rect x="0" y="6" width="3" height="5" rx="1"/><rect x="4" y="4" width="3" height="7" rx="1"/><rect x="8" y="2" width="3" height="9" rx="1"/><rect x="12" y="0" width="3" height="11" rx="1"/></svg>
+              <svg viewBox="0 0 18 12" fill="currentColor" width="18"><path d="M9 2c2.5 0 4.8.9 6.5 2.5l-1 1A7 7 0 0 0 9 3.5 7 7 0 0 0 3.5 5.5l-1-1A9 9 0 0 1 9 2zm0 3c1.7 0 3.2.6 4.4 1.7l-1 1A4.5 4.5 0 0 0 9 6.5 4.5 4.5 0 0 0 5.6 7.7l-1-1A6 6 0 0 1 9 5zm0 3c.9 0 1.7.3 2.3.9L9 11.2 6.7 8.9A3 3 0 0 1 9 8z"/></svg>
+              <svg viewBox="0 0 25 11" fill="none" width="25"><rect x="0.5" y="0.5" width="21" height="10" rx="2.5" stroke="currentColor"/><rect x="2" y="2" width="15" height="7" rx="1" fill="currentColor"/><rect x="22" y="3.5" width="2" height="4" rx="1" fill="currentColor"/></svg>
+            </div>
+          </div>
+
+          <!-- floating glass profile pill -->
+          <div class="corner-pill glass">
+            <div class="av">A</div>
+            <span>Personal</span>
+          </div>
+
+          <div class="screen-body">
+            <div class="home">
+              <div class="greeting">
+                <div class="hello">Friday afternoon</div>
+                <h1>Hey Arian,<br/>what's <span class="grad">on your mind?</span></h1>
+              </div>
+
+              <div class="home-search">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <circle cx="7" cy="7" r="4.5"/><path d="M14 14l-3.5-3.5"/>
+                </svg>
+                <span>Search or ask anything…</span>
+              </div>
+
+              <div class="ai-card">
+                <div class="spark">
+                  <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2l1.5 4.5L14 8l-4.5 1.5L8 14l-1.5-4.5L2 8l4.5-1.5z"/></svg>
+                </div>
+                <div class="body">
+                  <div class="ttl">Continue where you left off</div>
+                  <div class="sub">"Show HN: An alternative renderer…" — 4 min read remaining. Tap to resume or ask AI for a summary.</div>
+                </div>
+              </div>
+
+              <div>
+                <div class="section-h">
+                  <span>Pinned</span>
+                  <span class="more">Edit</span>
+                </div>
+                <div class="pins">
+                  <div class="pin gh"><div class="pin-ico">⌥</div><div class="pin-name">GitHub</div></div>
+                  <div class="pin fg"><div class="pin-ico">F</div><div class="pin-name">Figma</div></div>
+                  <div class="pin hn"><div class="pin-ico">Y</div><div class="pin-name">HN</div></div>
+                  <div class="pin no"><div class="pin-ico">N</div><div class="pin-name">Notion</div></div>
+                  <div class="pin tw"><div class="pin-ico">𝕏</div><div class="pin-name">X</div></div>
+                  <div class="pin yt"><div class="pin-ico">▶</div><div class="pin-name">YouTube</div></div>
+                  <div class="pin ar"><div class="pin-ico">ar</div><div class="pin-name">arXiv</div></div>
+                  <div class="pin tg"><div class="pin-ico">✈</div><div class="pin-name">Telegram</div></div>
+                </div>
+              </div>
+
+              <div>
+                <div class="section-h">
+                  <span>For you</span>
+                  <span class="more">See all</span>
+                </div>
+                <div class="feed-card">
+                  <div class="feed-thumb">L</div>
+                  <div>
+                    <div class="feed-meta">Lumen · 2h</div>
+                    <div class="feed-ttl">The page metaphor is finally starting to break.</div>
+                  </div>
+                </div>
+                <div class="feed-card">
+                  <div class="feed-thumb b">S</div>
+                  <div>
+                    <div class="feed-meta">Swift Forums · 5h</div>
+                    <div class="feed-ttl">A native layout graph as the foundation for browsers.</div>
+                  </div>
+                </div>
+                <div class="feed-card">
+                  <div class="feed-thumb c">H</div>
+                  <div>
+                    <div class="feed-meta">Hacker News · 8h</div>
+                    <div class="feed-ttl">Show HN: An alternative renderer for the modern web.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="addrbar">
+            <button class="addr-btn">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 4L6 8l4 4"/></svg>
+            </button>
+            <div class="addr-url">
+              <svg class="lock" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+                <rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/>
+              </svg>
+              <span class="host">lumen://home</span>
+            </div>
+            <button class="addr-btn ai">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2l1.5 4.5L14 8l-4.5 1.5L8 14l-1.5-4.5L2 8l4.5-1.5z"/></svg>
+            </button>
+          </div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+      <div class="frame-label">Home / New tab</div>
+    </div>
+
+    <!-- ============ PAGE VIEW ============ -->
+    <div class="frame-wrap" data-state="1">
+      <div class="phone">
+        <div class="screen">
+          <div class="island"></div>
+
+          <div class="screen-body">
+            <div class="page-wrap">
+              <div class="page-hero">
+                <div class="kicker">Show HN · 2 hours ago</div>
+              </div>
+              <div class="page-content">
+                <h1>An alternative renderer that treats the browser as a real native surface.</h1>
+                <div class="meta">
+                  <span>by aria-n</span>
+                  <span class="dot"></span>
+                  <span>4 min read</span>
+                </div>
+                <p><strong>For two decades the web has been shaped by a single rendering pipeline.</strong> HTML, CSS and JavaScript all funnel into the same compositor — the page. We took a step back and asked: what happens if you let the platform render itself?</p>
+                <p>The result is Lumen — a browser that treats a webpage as a description, not a pixel buffer. Text flows through the system text engine. Images decode through the platform. Scrolling and accessibility behave the way the user already expects from the rest of their device.</p>
+                <div class="page-quote">"We didn't want a browser that looks like an app. We wanted an app that happens to be a browser."</div>
+                <p>The trade-off, of course, is fidelity — and that is exactly the conversation we wanted to start.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- floats over the hero -->
+          <div class="top-scrim"></div>
+          <div class="status-bar">
+            <span>9:41</span>
+            <div class="status-right">
+              <svg viewBox="0 0 16 11" fill="currentColor"><rect x="0" y="6" width="3" height="5" rx="1"/><rect x="4" y="4" width="3" height="7" rx="1"/><rect x="8" y="2" width="3" height="9" rx="1"/><rect x="12" y="0" width="3" height="11" rx="1"/></svg>
+              <svg viewBox="0 0 18 12" fill="currentColor" width="18"><path d="M9 2c2.5 0 4.8.9 6.5 2.5l-1 1A7 7 0 0 0 9 3.5 7 7 0 0 0 3.5 5.5l-1-1A9 9 0 0 1 9 2zm0 3c1.7 0 3.2.6 4.4 1.7l-1 1A4.5 4.5 0 0 0 9 6.5 4.5 4.5 0 0 0 5.6 7.7l-1-1A6 6 0 0 1 9 5zm0 3c.9 0 1.7.3 2.3.9L9 11.2 6.7 8.9A3 3 0 0 1 9 8z"/></svg>
+              <svg viewBox="0 0 25 11" fill="none" width="25"><rect x="0.5" y="0.5" width="21" height="10" rx="2.5" stroke="currentColor"/><rect x="2" y="2" width="15" height="7" rx="1" fill="currentColor"/><rect x="22" y="3.5" width="2" height="4" rx="1" fill="currentColor"/></svg>
+            </div>
+          </div>
+
+          <!-- floating glass URL pill below status bar -->
+          <div class="top-pill glass">
+            <button class="pill-btn" title="Back">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 4L6 8l4 4"/></svg>
+            </button>
+            <svg class="lock" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/>
+            </svg>
+            <span class="host-name">news.ycombinator.com</span>
+            <button class="pill-btn ai" title="Ask AI">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2l1.5 4.5L14 8l-4.5 1.5L8 14l-1.5-4.5L2 8l4.5-1.5z"/></svg>
+            </button>
+          </div>
+
+          <div class="addrbar">
+            <button class="addr-btn">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 4L6 8l4 4"/></svg>
+            </button>
+            <div class="addr-url">
+              <svg class="lock" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+                <rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/>
+              </svg>
+              <span class="host">news.ycombinator.com</span>
+            </div>
+            <button class="addr-btn ai" title="Ask AI">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2l1.5 4.5L14 8l-4.5 1.5L8 14l-1.5-4.5L2 8l4.5-1.5z"/></svg>
+            </button>
+          </div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+      <div class="frame-label">Reading a page</div>
+    </div>
+
+    <!-- ============ TAB SWITCHER ============ -->
+    <div class="frame-wrap" data-state="2">
+      <div class="phone">
+        <div class="screen">
+          <div class="island"></div>
+          <div class="top-scrim"></div>
+          <div class="status-bar">
+            <span>9:41</span>
+            <div class="status-right">
+              <svg viewBox="0 0 16 11" fill="currentColor"><rect x="0" y="6" width="3" height="5" rx="1"/><rect x="4" y="4" width="3" height="7" rx="1"/><rect x="8" y="2" width="3" height="9" rx="1"/><rect x="12" y="0" width="3" height="11" rx="1"/></svg>
+              <svg viewBox="0 0 18 12" fill="currentColor" width="18"><path d="M9 2c2.5 0 4.8.9 6.5 2.5l-1 1A7 7 0 0 0 9 3.5 7 7 0 0 0 3.5 5.5l-1-1A9 9 0 0 1 9 2zm0 3c1.7 0 3.2.6 4.4 1.7l-1 1A4.5 4.5 0 0 0 9 6.5 4.5 4.5 0 0 0 5.6 7.7l-1-1A6 6 0 0 1 9 5zm0 3c.9 0 1.7.3 2.3.9L9 11.2 6.7 8.9A3 3 0 0 1 9 8z"/></svg>
+              <svg viewBox="0 0 25 11" fill="none" width="25"><rect x="0.5" y="0.5" width="21" height="10" rx="2.5" stroke="currentColor"/><rect x="2" y="2" width="15" height="7" rx="1" fill="currentColor"/><rect x="22" y="3.5" width="2" height="4" rx="1" fill="currentColor"/></svg>
+            </div>
+          </div>
+
+          <div class="title-pill glass">
+            <span class="t">12 Tabs</span>
+            <span class="s">Personal · synced</span>
+          </div>
+          <div class="action-pill glass">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+          </div>
+
+          <div class="screen-body">
+            <div class="switcher-search">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="7" cy="7" r="4.5"/><path d="M14 14l-3.5-3.5"/>
+              </svg>
+              <span>Search tabs</span>
+            </div>
+
+            <div class="switcher-tabs">
+
+              <div class="tab-card active hero">
+                <div class="head">
+                  <div class="favicon fv-hn">Y</div>
+                  <span class="host">news.ycombinator.com</span>
+                  <span class="x">×</span>
+                </div>
+                <div class="preview">
+                  <div class="ttl">Show HN: An alternative renderer for…</div>
+                  <div class="bar med"></div>
+                  <div class="bar"></div>
+                  <div class="bar short"></div>
+                </div>
+              </div>
+
+              <div class="tab-card">
+                <div class="head">
+                  <div class="favicon fv-gh">GH</div>
+                  <span class="host">github.com</span>
+                  <span class="x">×</span>
+                </div>
+                <div class="preview">
+                  <div class="ttl">aria-n / lumen — Pull requests</div>
+                  <div class="bar"></div>
+                  <div class="bar med"></div>
+                  <div class="bar"></div>
+                </div>
+              </div>
+
+              <div class="tab-card hero2">
+                <div class="head">
+                  <div class="favicon fv-fg">F</div>
+                  <span class="host">figma.com</span>
+                  <span class="x">×</span>
+                </div>
+                <div class="preview">
+                  <div class="ttl">Lumen — design system v0.3</div>
+                  <div class="bar short"></div>
+                  <div class="bar med"></div>
+                </div>
+              </div>
+
+              <div class="tab-card">
+                <div class="head">
+                  <div class="favicon fv-arx">a</div>
+                  <span class="host">arxiv.org</span>
+                  <span class="x">×</span>
+                </div>
+                <div class="preview">
+                  <div class="ttl">Visual transformers for layout 2403.14102</div>
+                  <div class="bar"></div>
+                  <div class="bar med"></div>
+                  <div class="bar"></div>
+                  <div class="bar short"></div>
+                </div>
+              </div>
+
+              <div class="tab-card hero3">
+                <div class="head">
+                  <div class="favicon fv-yt">▶</div>
+                  <span class="host">youtube.com</span>
+                  <span class="x">×</span>
+                </div>
+                <div class="preview">
+                  <div class="ttl">SwiftUI layout deep dive · WWDC25</div>
+                  <div class="bar short"></div>
+                </div>
+              </div>
+
+              <div class="tab-card">
+                <div class="head">
+                  <div class="favicon fv-tw">𝕏</div>
+                  <span class="host">x.com</span>
+                  <span class="x">×</span>
+                </div>
+                <div class="preview">
+                  <div class="ttl">@aria_n: rebuilding the browser…</div>
+                  <div class="bar"></div>
+                  <div class="bar short"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="switcher-foot">
+            <button class="sf-btn">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>
+            </button>
+            <button class="sf-btn">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 3h8v11l-4-3-4 3z"/></svg>
+            </button>
+            <div class="sf-divider"></div>
+            <button class="sf-btn primary">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v10M3 8h10"/></svg>
+            </button>
+            <div class="sf-divider"></div>
+            <button class="sf-btn">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3v8M5 6l3-3 3 3M3 11v2h10v-2"/></svg>
+            </button>
+            <button class="sf-btn">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="3" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="13" cy="8" r="1.2"/></svg>
+            </button>
+          </div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+      <div class="frame-label">Tab switcher</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  function showState(i) {
+    document.querySelectorAll('.frame-wrap').forEach((el, idx) => {
+      el.classList.toggle('live', idx === i);
+    });
+    document.querySelectorAll('.mobile-tabs button').forEach((b, idx) => {
+      b.classList.toggle('on', idx === i);
+    });
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+
+  // Safari-like scroll-aware bottom bar
+  function setupScrollAware(scope) {
+    const scrollEl = scope.querySelector('.home, .page-wrap, .switcher-tabs');
+    const bar = scope.querySelector('.addrbar, .switcher-foot');
+    if (!scrollEl || !bar) return;
+
+    let lastScroll = 0;
+    let ticking = false;
+    scrollEl.addEventListener('scroll', () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const current = scrollEl.scrollTop;
+        const delta = current - lastScroll;
+        if (current < 30) {
+          bar.classList.remove('compact');
+        } else if (delta > 5) {
+          bar.classList.add('compact');
+        } else if (delta < -5) {
+          bar.classList.remove('compact');
+        }
+        lastScroll = current;
+        ticking = false;
+      });
+    });
+
+    // tap compact bar to expand it
+    bar.addEventListener('click', () => {
+      if (bar.classList.contains('compact')) {
+        bar.classList.remove('compact');
+      }
+    });
+  }
+
+  document.querySelectorAll('.frame-wrap').forEach(setupScrollAware);
+</script>
+
+</body>
+</html>

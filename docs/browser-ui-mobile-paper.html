@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#F2EDE2" />
+<title>Lumen Mobile — Paper / Editorial</title>
+<style>
+  :root {
+    /* warm paper palette */
+    --paper:   #F2EDE2;
+    --paper-2: #EAE3D2;
+    --paper-3: #DDD3BE;
+    --card:    #FBF7EC;
+    --ink:     #1A1612;
+    --ink-2:   #5B5347;
+    --ink-3:   #8A8275;
+    --ink-4:   #B5AC9B;
+    --rule:    rgba(26, 22, 18, 0.10);
+    --rule-hi: rgba(26, 22, 18, 0.18);
+
+    --vermilion: #B33B26;
+    --sage:      #4A6B5C;
+    --gold:      #C9963A;
+
+    --serif: "Iowan Old Style", "Hoefler Text", "Apple Garamond", "Georgia", "Times New Roman", serif;
+    --sans:  -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+    --mono:  "SF Mono", "ui-monospace", Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: var(--sans);
+    color: var(--ink);
+    background:
+      radial-gradient(1400px 900px at 80% -10%, rgba(201, 150, 58, 0.10), transparent 60%),
+      radial-gradient(1100px 800px at -10% 110%, rgba(74, 107, 92, 0.06), transparent 60%),
+      #0e0d0b;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: -0.005em;
+  }
+
+  /* ----------- Desktop showcase ----------- */
+  .showcase {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 60px 24px 80px;
+    gap: 36px;
+  }
+  .showcase h2 {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 16px;
+    color: rgba(245, 240, 230, 0.5);
+    margin: 0;
+    letter-spacing: 0.02em;
+  }
+  .stage {
+    display: flex;
+    gap: 28px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .frame-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+  .frame-label {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: rgba(245, 240, 230, 0.4);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  /* phone frame */
+  .phone {
+    width: 380px;
+    height: 800px;
+    background: #050507;
+    border-radius: 56px;
+    padding: 12px;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.04),
+      0 2px 0 rgba(255,255,255,0.04) inset,
+      0 30px 80px rgba(0,0,0,0.6),
+      0 0 0 8px #1a1a22;
+    position: relative;
+  }
+  .screen {
+    width: 100%;
+    height: 100%;
+    background: var(--paper);
+    border-radius: 44px;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    /* subtle paper grain via layered noise gradient */
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(179, 59, 38, 0.04), transparent 40%),
+      radial-gradient(circle at 80% 90%, rgba(74, 107, 92, 0.04), transparent 40%);
+    background-color: var(--paper);
+  }
+  /* paper grain overlay */
+  .screen::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.1  0 0 0 0 0.08  0 0 0 0 0.06  0 0 0 0.4 0'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.5'/></svg>");
+    opacity: 0.4;
+    mix-blend-mode: multiply;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .island {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 110px;
+    height: 32px;
+    background: #000;
+    border-radius: 20px;
+    z-index: 200;
+  }
+
+  /* status bar — dark text floats over paper */
+  .status-bar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    padding: 16px 28px 0;
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+    height: 54px;
+    align-items: center;
+    z-index: 50;
+    pointer-events: none;
+  }
+  .status-right { display: flex; align-items: center; gap: 5px; }
+  .status-right svg { width: 16px; height: 11px; }
+
+  /* ----- Paper Glass utilities ----- */
+  .glass {
+    background:
+      linear-gradient(180deg, rgba(255,253,245,0.85), rgba(255,253,245,0.55));
+    backdrop-filter: blur(32px) saturate(140%);
+    -webkit-backdrop-filter: blur(32px) saturate(140%);
+    border: 0.5px solid rgba(26,22,18,0.12);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.8),
+      inset 0 -0.5px 0 rgba(26,22,18,0.04),
+      0 8px 22px rgba(40, 28, 14, 0.10),
+      0 1px 2px rgba(40, 28, 14, 0.06);
+  }
+
+  /* top capsule pills */
+  .top-pill {
+    position: absolute;
+    top: 62px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 8px 7px 14px;
+    border-radius: 999px;
+    max-width: calc(100% - 32px);
+    font-size: 13px;
+    color: var(--ink);
+  }
+  .top-pill .host-name { font-weight: 500; white-space: nowrap; }
+  .top-pill .lock { color: var(--sage); flex-shrink: 0; }
+  .pill-btn {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: rgba(26,22,18,0.06);
+    border: 0.5px solid rgba(26,22,18,0.10);
+    display: grid; place-items: center;
+    color: var(--ink);
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: background 120ms ease;
+  }
+  .pill-btn:active { background: rgba(26,22,18,0.12); }
+  .pill-btn svg { width: 13px; height: 13px; }
+  .pill-btn.ai {
+    background: var(--ink);
+    color: var(--paper);
+    border-color: var(--ink);
+  }
+  .pill-btn.ai svg { color: var(--gold); }
+
+  .corner-pill {
+    position: absolute;
+    top: 62px;
+    right: 16px;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px 5px 5px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .corner-pill .av {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: var(--ink);
+    color: var(--paper);
+    display: grid; place-items: center;
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 13px;
+    font-style: italic;
+  }
+
+  .date-pill {
+    position: absolute;
+    top: 62px;
+    left: 16px;
+    z-index: 60;
+    padding: 7px 14px;
+    border-radius: 999px;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 13px;
+    color: var(--ink-2);
+  }
+
+  .title-pill-left {
+    position: absolute;
+    top: 62px;
+    left: 16px;
+    z-index: 60;
+    padding: 8px 16px;
+    border-radius: 22px;
+    display: flex;
+    flex-direction: column;
+  }
+  .title-pill-left .t {
+    font-family: var(--serif);
+    font-size: 18px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+    color: var(--ink);
+  }
+  .title-pill-left .s {
+    font-size: 11px;
+    color: var(--ink-3);
+    margin-top: 1px;
+    font-family: var(--mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* screen body */
+  .screen-body {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    z-index: 2;
+  }
+
+  /* shared section labels */
+  .label {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--ink-3);
+    font-weight: 500;
+  }
+
+  /* ======================================
+     1. HOME — Reading list
+     ====================================== */
+  .home {
+    flex: 1;
+    overflow-y: auto;
+    padding: 124px 22px 130px;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+  .home::-webkit-scrollbar { display: none; }
+
+  .hero-title {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .hero-title h1 {
+    font-family: var(--serif);
+    font-size: 52px;
+    font-weight: 500;
+    letter-spacing: -0.025em;
+    margin: 0;
+    line-height: 0.95;
+    color: var(--ink);
+  }
+  .hero-title h1 em {
+    font-style: italic;
+    color: var(--vermilion);
+  }
+  .hero-title .sub {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-top: 6px;
+  }
+
+  .ask {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--card);
+    border: 0.5px solid var(--rule);
+    border-radius: 14px;
+    padding: 14px 16px;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 15.5px;
+    color: var(--ink-3);
+  }
+  .ask svg { color: var(--ink-3); }
+
+  .featured {
+    background: var(--card);
+    border: 0.5px solid var(--rule);
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.4) inset,
+                0 8px 22px rgba(40, 28, 14, 0.06);
+  }
+  .featured .cover {
+    height: 140px;
+    background:
+      radial-gradient(circle at 30% 40%, rgba(201, 150, 58, 0.4), transparent 60%),
+      radial-gradient(circle at 75% 70%, rgba(179, 59, 38, 0.35), transparent 60%),
+      linear-gradient(135deg, #E8D9B5, #D4A878);
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    padding: 14px 18px;
+  }
+  .featured .cover .src {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(40, 28, 14, 0.75);
+    background: rgba(255,253,245,0.7);
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+  .featured .body { padding: 18px 18px 16px; }
+  .featured .body h3 {
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    line-height: 1.15;
+    margin: 0 0 10px;
+    color: var(--ink);
+  }
+  .featured .body .meta {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    font-size: 12px;
+    color: var(--ink-3);
+  }
+  .featured .meta .dot { width: 3px; height: 3px; border-radius: 50%; background: var(--ink-4); }
+  .featured .progress {
+    margin: 16px 0 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .featured .progress .bar {
+    flex: 1;
+    height: 3px;
+    background: var(--paper-2);
+    border-radius: 2px;
+    position: relative;
+    overflow: hidden;
+  }
+  .featured .progress .bar::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 60%;
+    background: var(--vermilion);
+    border-radius: 2px;
+  }
+  .featured .progress .pct {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-3);
+    letter-spacing: 0.1em;
+  }
+
+  /* sources chip row */
+  .sources {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    margin: 0 -22px;
+    padding: 0 22px;
+  }
+  .sources::-webkit-scrollbar { display: none; }
+  .source-chip {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px 8px 8px;
+    background: var(--card);
+    border: 0.5px solid var(--rule);
+    border-radius: 999px;
+    font-size: 12.5px;
+    color: var(--ink-2);
+  }
+  .source-chip .fav {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .src-hn  { background: #FF6600; }
+  .src-gh  { background: var(--ink); }
+  .src-arx { background: var(--vermilion); font-family: var(--serif); font-style: italic; }
+  .src-fg  { background: var(--sage); }
+  .src-nyt { background: var(--ink); font-family: var(--serif); font-style: italic; }
+
+  /* more list */
+  .more-list {
+    display: flex;
+    flex-direction: column;
+  }
+  .more-item {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    padding: 14px 0;
+    border-bottom: 0.5px solid var(--rule);
+  }
+  .more-item:first-of-type { border-top: 0.5px solid var(--rule); }
+  .more-item .num {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-4);
+    width: 18px;
+    letter-spacing: 0.06em;
+    flex-shrink: 0;
+  }
+  .more-item .body { flex: 1; min-width: 0; }
+  .more-item .ttl {
+    font-family: var(--serif);
+    font-size: 15.5px;
+    line-height: 1.3;
+    color: var(--ink);
+    letter-spacing: -0.005em;
+    margin-bottom: 4px;
+  }
+  .more-item .mt {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* ======================================
+     2. PAGE — Editorial reader
+     ====================================== */
+  .read-progress {
+    position: absolute;
+    top: 0; left: 0;
+    height: 2px;
+    background: var(--vermilion);
+    width: 32%;
+    z-index: 80;
+    transition: width 200ms linear;
+  }
+  .page-wrap {
+    flex: 1;
+    overflow-y: auto;
+    padding: 120px 26px 130px;
+  }
+  .page-wrap::-webkit-scrollbar { display: none; }
+  .page-kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--vermilion);
+    font-weight: 500;
+    margin-bottom: 16px;
+  }
+  .page-title {
+    font-family: var(--serif);
+    font-size: 36px;
+    font-weight: 500;
+    letter-spacing: -0.022em;
+    margin: 0 0 16px;
+    line-height: 1.05;
+    color: var(--ink);
+  }
+  .page-meta {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 24px;
+    padding-bottom: 18px;
+    border-bottom: 0.5px solid var(--rule);
+  }
+  .page-meta .dot { width: 3px; height: 3px; border-radius: 50%; background: var(--ink-4); }
+
+  .prose p {
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.65;
+    color: var(--ink);
+    margin: 0 0 18px;
+  }
+  .prose p.dropcap::first-letter {
+    font-family: var(--serif);
+    font-size: 4.2em;
+    float: left;
+    line-height: 0.85;
+    margin: 0.06em 0.1em 0 0;
+    font-weight: 500;
+    color: var(--vermilion);
+  }
+  .pull-quote {
+    border-left: 2px solid var(--vermilion);
+    padding-left: 18px;
+    margin: 28px 0 28px 2px;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 20px;
+    line-height: 1.4;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+
+  /* ======================================
+     3. TABS — Journal index
+     ====================================== */
+  .library {
+    flex: 1;
+    overflow-y: auto;
+    padding: 124px 0 130px;
+  }
+  .library::-webkit-scrollbar { display: none; }
+
+  .library-search {
+    margin: 0 22px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--card);
+    border: 0.5px solid var(--rule);
+    border-radius: 12px;
+    padding: 11px 14px;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 14px;
+    color: var(--ink-3);
+  }
+
+  .lib-section-h {
+    margin: 22px 22px 8px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-3);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .lib-section-h::after {
+    content: "";
+    flex: 1;
+    height: 0.5px;
+    background: var(--rule);
+  }
+  .lib-section-h .count { color: var(--ink-4); }
+
+  .lib-item {
+    display: grid;
+    grid-template-columns: 26px 1fr auto;
+    gap: 14px;
+    align-items: center;
+    padding: 14px 22px;
+    border-bottom: 0.5px solid var(--rule);
+    position: relative;
+  }
+  .lib-item.active {
+    background: rgba(179, 59, 38, 0.04);
+  }
+  .lib-item.active::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 2px;
+    background: var(--vermilion);
+  }
+  .lib-item .num {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-4);
+    letter-spacing: 0.06em;
+  }
+  .lib-item.active .num { color: var(--vermilion); }
+  .lib-item .body { min-width: 0; }
+  .lib-item .host {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    color: var(--ink-3);
+    margin-bottom: 3px;
+    text-transform: lowercase;
+  }
+  .lib-item .ttl {
+    font-family: var(--serif);
+    font-size: 15px;
+    line-height: 1.3;
+    color: var(--ink);
+    letter-spacing: -0.005em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .lib-item .when {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--ink-3);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-align: right;
+    line-height: 1.4;
+  }
+  .lib-item .when .dot {
+    display: inline-block;
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: var(--sage);
+    margin-right: 5px;
+    vertical-align: 1px;
+  }
+
+  /* ============= FAB (single floating orb) ============= */
+  .fab {
+    position: absolute;
+    bottom: 28px;
+    right: 18px;
+    z-index: 70;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #2A2520, #1A1612);
+    color: var(--paper);
+    display: grid; place-items: center;
+    cursor: pointer;
+    border: 0.5px solid rgba(255,253,245,0.08);
+    box-shadow:
+      inset 0 1px 0 rgba(255,253,245,0.18),
+      inset 0 -1px 0 rgba(0,0,0,0.3),
+      0 14px 36px rgba(40, 28, 14, 0.35),
+      0 4px 10px rgba(40, 28, 14, 0.2);
+    transition:
+      transform 380ms cubic-bezier(0.32, 0.72, 0, 1),
+      width 380ms cubic-bezier(0.32, 0.72, 0, 1),
+      height 380ms cubic-bezier(0.32, 0.72, 0, 1),
+      bottom 380ms cubic-bezier(0.32, 0.72, 0, 1),
+      right 380ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .fab.compact {
+    width: 44px;
+    height: 44px;
+    bottom: 24px;
+    right: 16px;
+  }
+  .fab svg { width: 22px; height: 22px; color: var(--gold); }
+  .fab.compact svg { width: 18px; height: 18px; }
+  .fab .plus { color: var(--paper); }
+
+  /* a small fab label that floats next to the orb */
+  .fab-hint {
+    position: absolute;
+    bottom: 44px;
+    right: 92px;
+    z-index: 70;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    transition: opacity 220ms ease, transform 320ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .fab-hint.hide {
+    opacity: 0;
+    transform: translateX(8px);
+    pointer-events: none;
+  }
+
+  .home-indicator {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 134px;
+    height: 5px;
+    background: rgba(26, 22, 18, 0.30);
+    border-radius: 3px;
+    z-index: 80;
+  }
+
+  /* ============ Responsive ============ */
+  @media (max-width: 760px) {
+    body { background: var(--paper); }
+    .showcase { padding: 0; min-height: 100vh; }
+    .showcase > h2, .frame-label { display: none; }
+    .stage {
+      gap: 0;
+      flex-direction: column;
+      width: 100vw;
+      height: 100vh;
+    }
+    .frame-wrap { width: 100%; height: 100vh; display: none; }
+    .frame-wrap.live { display: flex; }
+    .phone {
+      width: 100vw;
+      height: 100vh;
+      padding: 0;
+      border-radius: 0;
+      box-shadow: none;
+      background: var(--paper);
+    }
+    .screen { border-radius: 0; }
+    .island { display: none; }
+    .status-bar { padding-top: env(safe-area-inset-top, 14px); }
+    .fab, .home-indicator { bottom: max(20px, env(safe-area-inset-bottom, 20px)); }
+    .home-indicator { display: none; }
+
+    .mobile-tabs {
+      position: fixed;
+      top: env(safe-area-inset-top, 12px);
+      right: 12px;
+      z-index: 300;
+      display: flex;
+      gap: 4px;
+      background: rgba(255,253,245,0.7);
+      backdrop-filter: blur(30px) saturate(150%);
+      border: 0.5px solid rgba(26,22,18,0.12);
+      border-radius: 10px;
+      padding: 4px;
+    }
+    .mobile-tabs button {
+      background: transparent;
+      border: none;
+      color: var(--ink-3);
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 7px;
+      font-family: var(--mono);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .mobile-tabs button.on {
+      background: var(--ink);
+      color: var(--paper);
+    }
+  }
+  .mobile-tabs { display: none; }
+  @media (max-width: 760px) {
+    .mobile-tabs { display: flex; }
+  }
+</style>
+</head>
+<body>
+
+<div class="mobile-tabs">
+  <button class="on" onclick="showState(0)">Home</button>
+  <button onclick="showState(1)">Page</button>
+  <button onclick="showState(2)">Tabs</button>
+</div>
+
+<div class="showcase">
+  <h2>Lumen Mobile · Paper Edition</h2>
+
+  <div class="stage">
+
+    <!-- ============ HOME ============ -->
+    <div class="frame-wrap live" data-state="0">
+      <div class="phone">
+        <div class="screen">
+          <div class="island"></div>
+          <div class="status-bar">
+            <span>9:41</span>
+            <div class="status-right">
+              <svg viewBox="0 0 16 11" fill="currentColor"><rect x="0" y="6" width="3" height="5" rx="1"/><rect x="4" y="4" width="3" height="7" rx="1"/><rect x="8" y="2" width="3" height="9" rx="1"/><rect x="12" y="0" width="3" height="11" rx="1"/></svg>
+              <svg viewBox="0 0 18 12" fill="currentColor" width="18"><path d="M9 2c2.5 0 4.8.9 6.5 2.5l-1 1A7 7 0 0 0 9 3.5 7 7 0 0 0 3.5 5.5l-1-1A9 9 0 0 1 9 2zm0 3c1.7 0 3.2.6 4.4 1.7l-1 1A4.5 4.5 0 0 0 9 6.5 4.5 4.5 0 0 0 5.6 7.7l-1-1A6 6 0 0 1 9 5zm0 3c.9 0 1.7.3 2.3.9L9 11.2 6.7 8.9A3 3 0 0 1 9 8z"/></svg>
+              <svg viewBox="0 0 25 11" fill="none" width="25"><rect x="0.5" y="0.5" width="21" height="10" rx="2.5" stroke="currentColor"/><rect x="2" y="2" width="15" height="7" rx="1" fill="currentColor"/><rect x="22" y="3.5" width="2" height="4" rx="1" fill="currentColor"/></svg>
+            </div>
+          </div>
+
+          <div class="date-pill glass">Tuesday, 13 May</div>
+          <div class="corner-pill glass">
+            <div class="av">A</div>
+            <span>Personal</span>
+          </div>
+
+          <div class="screen-body">
+            <div class="home">
+
+              <div class="hero-title">
+                <h1>Today's<br/><em>reading</em> list.</h1>
+                <div class="sub">12 articles &middot; 3 unread</div>
+              </div>
+
+              <div class="ask">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <circle cx="7" cy="7" r="4.5"/><path d="M14 14l-3.5-3.5"/>
+                </svg>
+                <span>Ask anything, find anywhere…</span>
+              </div>
+
+              <div>
+                <div class="label" style="margin-bottom: 12px;">Continue reading</div>
+                <div class="featured">
+                  <div class="cover">
+                    <span class="src">Hacker News &middot; 2h ago</span>
+                  </div>
+                  <div class="body">
+                    <h3>An alternative renderer that treats the browser as a real native surface.</h3>
+                    <div class="meta">
+                      <span>by aria-n</span>
+                      <span class="dot"></span>
+                      <span>4 min read</span>
+                      <span class="dot"></span>
+                      <span>Saved today</span>
+                    </div>
+                    <div class="progress">
+                      <div class="bar"></div>
+                      <span class="pct">60%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div class="label" style="margin-bottom: 12px;">Sources</div>
+                <div class="sources">
+                  <div class="source-chip"><div class="fav src-hn">Y</div>Hacker News</div>
+                  <div class="source-chip"><div class="fav src-gh">G</div>GitHub</div>
+                  <div class="source-chip"><div class="fav src-arx">a</div>arXiv</div>
+                  <div class="source-chip"><div class="fav src-fg">F</div>Figma blog</div>
+                  <div class="source-chip"><div class="fav src-nyt">N</div>NYT</div>
+                </div>
+              </div>
+
+              <div>
+                <div class="label" style="margin-bottom: 8px;">More from today</div>
+                <div class="more-list">
+                  <div class="more-item">
+                    <span class="num">01</span>
+                    <div class="body">
+                      <div class="ttl">The page metaphor is finally starting to break.</div>
+                      <div class="mt">Lumen · 5 min</div>
+                    </div>
+                  </div>
+                  <div class="more-item">
+                    <span class="num">02</span>
+                    <div class="body">
+                      <div class="ttl">A native layout graph as the foundation for browsers.</div>
+                      <div class="mt">Swift Forums · 8 min</div>
+                    </div>
+                  </div>
+                  <div class="more-item">
+                    <span class="num">03</span>
+                    <div class="body">
+                      <div class="ttl">Show HN: Building Lumen, an experiment.</div>
+                      <div class="mt">Hacker News · 3 min</div>
+                    </div>
+                  </div>
+                  <div class="more-item">
+                    <span class="num">04</span>
+                    <div class="body">
+                      <div class="ttl">On the loss of fidelity, and what we gain in return.</div>
+                      <div class="mt">Substack · 12 min</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <div class="fab-hint">Ask</div>
+          <div class="fab">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2l1.5 4.5L14 8l-4.5 1.5L8 14l-1.5-4.5L2 8l4.5-1.5z"/></svg>
+          </div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+      <div class="frame-label">Reading list</div>
+    </div>
+
+    <!-- ============ PAGE ============ -->
+    <div class="frame-wrap" data-state="1">
+      <div class="phone">
+        <div class="screen">
+          <div class="island"></div>
+          <div class="read-progress"></div>
+          <div class="status-bar">
+            <span>9:41</span>
+            <div class="status-right">
+              <svg viewBox="0 0 16 11" fill="currentColor"><rect x="0" y="6" width="3" height="5" rx="1"/><rect x="4" y="4" width="3" height="7" rx="1"/><rect x="8" y="2" width="3" height="9" rx="1"/><rect x="12" y="0" width="3" height="11" rx="1"/></svg>
+              <svg viewBox="0 0 18 12" fill="currentColor" width="18"><path d="M9 2c2.5 0 4.8.9 6.5 2.5l-1 1A7 7 0 0 0 9 3.5 7 7 0 0 0 3.5 5.5l-1-1A9 9 0 0 1 9 2zm0 3c1.7 0 3.2.6 4.4 1.7l-1 1A4.5 4.5 0 0 0 9 6.5 4.5 4.5 0 0 0 5.6 7.7l-1-1A6 6 0 0 1 9 5zm0 3c.9 0 1.7.3 2.3.9L9 11.2 6.7 8.9A3 3 0 0 1 9 8z"/></svg>
+              <svg viewBox="0 0 25 11" fill="none" width="25"><rect x="0.5" y="0.5" width="21" height="10" rx="2.5" stroke="currentColor"/><rect x="2" y="2" width="15" height="7" rx="1" fill="currentColor"/><rect x="22" y="3.5" width="2" height="4" rx="1" fill="currentColor"/></svg>
+            </div>
+          </div>
+
+          <div class="top-pill glass">
+            <button class="pill-btn" title="Back">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 4L6 8l4 4"/></svg>
+            </button>
+            <svg class="lock" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/>
+            </svg>
+            <span class="host-name">news.ycombinator.com</span>
+            <button class="pill-btn" title="Reader settings">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 5h10M3 8h10M3 11h7"/></svg>
+            </button>
+          </div>
+
+          <div class="screen-body">
+            <div class="page-wrap">
+              <div class="page-kicker">Show HN · 2 hours ago</div>
+              <h1 class="page-title">An alternative renderer that treats the browser as a real native surface.</h1>
+              <div class="page-meta">
+                <span>By aria-n</span>
+                <span class="dot"></span>
+                <span>4 min read</span>
+              </div>
+
+              <div class="prose">
+                <p class="dropcap">For two decades the web has been shaped by a single rendering pipeline. HTML, CSS and JavaScript all funnel into the same compositor — the page. We took a step back and asked: what happens if you let the platform render itself?</p>
+                <p>The result is Lumen — a browser that treats a webpage as a description, not a pixel buffer. Text flows through the system text engine. Images decode through the platform. Scrolling and accessibility behave the way the user already expects from the rest of their device.</p>
+                <div class="pull-quote">"We didn't want a browser that looks like an app. We wanted an app that happens to be a browser."</div>
+                <p>The trade-off, of course, is fidelity — and that is exactly the conversation we wanted to start. The early build supports a focused subset of the modern web.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="fab">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2l1.5 4.5L14 8l-4.5 1.5L8 14l-1.5-4.5L2 8l4.5-1.5z"/></svg>
+          </div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+      <div class="frame-label">Reading a page</div>
+    </div>
+
+    <!-- ============ TABS / LIBRARY ============ -->
+    <div class="frame-wrap" data-state="2">
+      <div class="phone">
+        <div class="screen">
+          <div class="island"></div>
+          <div class="status-bar">
+            <span>9:41</span>
+            <div class="status-right">
+              <svg viewBox="0 0 16 11" fill="currentColor"><rect x="0" y="6" width="3" height="5" rx="1"/><rect x="4" y="4" width="3" height="7" rx="1"/><rect x="8" y="2" width="3" height="9" rx="1"/><rect x="12" y="0" width="3" height="11" rx="1"/></svg>
+              <svg viewBox="0 0 18 12" fill="currentColor" width="18"><path d="M9 2c2.5 0 4.8.9 6.5 2.5l-1 1A7 7 0 0 0 9 3.5 7 7 0 0 0 3.5 5.5l-1-1A9 9 0 0 1 9 2zm0 3c1.7 0 3.2.6 4.4 1.7l-1 1A4.5 4.5 0 0 0 9 6.5 4.5 4.5 0 0 0 5.6 7.7l-1-1A6 6 0 0 1 9 5zm0 3c.9 0 1.7.3 2.3.9L9 11.2 6.7 8.9A3 3 0 0 1 9 8z"/></svg>
+              <svg viewBox="0 0 25 11" fill="none" width="25"><rect x="0.5" y="0.5" width="21" height="10" rx="2.5" stroke="currentColor"/><rect x="2" y="2" width="15" height="7" rx="1" fill="currentColor"/><rect x="22" y="3.5" width="2" height="4" rx="1" fill="currentColor"/></svg>
+            </div>
+          </div>
+
+          <div class="title-pill-left glass">
+            <span class="t">Library</span>
+            <span class="s">12 open · 3 archived</span>
+          </div>
+
+          <div class="screen-body">
+            <div class="library">
+
+              <div class="library-search">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <circle cx="7" cy="7" r="4.5"/><path d="M14 14l-3.5-3.5"/>
+                </svg>
+                <span>Find a tab…</span>
+              </div>
+
+              <div class="lib-section-h"><span>Now reading</span><span class="count">·  1</span></div>
+
+              <div class="lib-item active">
+                <span class="num">01</span>
+                <div class="body">
+                  <div class="host">news.ycombinator.com</div>
+                  <div class="ttl">Show HN: An alternative renderer…</div>
+                </div>
+                <div class="when"><span class="dot"></span>now</div>
+              </div>
+
+              <div class="lib-section-h"><span>Earlier today</span><span class="count">·  5</span></div>
+
+              <div class="lib-item">
+                <span class="num">02</span>
+                <div class="body">
+                  <div class="host">github.com</div>
+                  <div class="ttl">aria-n / lumen — Pull requests</div>
+                </div>
+                <div class="when">2h<br/>ago</div>
+              </div>
+
+              <div class="lib-item">
+                <span class="num">03</span>
+                <div class="body">
+                  <div class="host">figma.com</div>
+                  <div class="ttl">Lumen — design system v0.3</div>
+                </div>
+                <div class="when">4h<br/>ago</div>
+              </div>
+
+              <div class="lib-item">
+                <span class="num">04</span>
+                <div class="body">
+                  <div class="host">arxiv.org</div>
+                  <div class="ttl">Visual transformers for layout (2403.14102)</div>
+                </div>
+                <div class="when">5h<br/>ago</div>
+              </div>
+
+              <div class="lib-item">
+                <span class="num">05</span>
+                <div class="body">
+                  <div class="host">youtube.com</div>
+                  <div class="ttl">SwiftUI layout deep dive · WWDC25</div>
+                </div>
+                <div class="when">6h<br/>ago</div>
+              </div>
+
+              <div class="lib-item">
+                <span class="num">06</span>
+                <div class="body">
+                  <div class="host">x.com</div>
+                  <div class="ttl">@aria_n: rebuilding the browser from scratch</div>
+                </div>
+                <div class="when">7h<br/>ago</div>
+              </div>
+
+              <div class="lib-section-h"><span>Yesterday</span><span class="count">·  3</span></div>
+
+              <div class="lib-item">
+                <span class="num">07</span>
+                <div class="body">
+                  <div class="host">apple.com</div>
+                  <div class="ttl">Human Interface Guidelines — Materials</div>
+                </div>
+                <div class="when">yest</div>
+              </div>
+
+              <div class="lib-item">
+                <span class="num">08</span>
+                <div class="body">
+                  <div class="host">notion.so</div>
+                  <div class="ttl">Lumen / Design notes</div>
+                </div>
+                <div class="when">yest</div>
+              </div>
+
+            </div>
+          </div>
+
+          <div class="fab">
+            <svg class="plus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v10M3 8h10"/></svg>
+          </div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+      <div class="frame-label">Library / Tabs</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  function showState(i) {
+    document.querySelectorAll('.frame-wrap').forEach((el, idx) => {
+      el.classList.toggle('live', idx === i);
+    });
+    document.querySelectorAll('.mobile-tabs button').forEach((b, idx) => {
+      b.classList.toggle('on', idx === i);
+    });
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+
+  // Scroll-aware reading progress + FAB shrink
+  function setupScrollAware(scope) {
+    const scrollEl = scope.querySelector('.home, .page-wrap, .library');
+    const fab      = scope.querySelector('.fab');
+    const hint     = scope.querySelector('.fab-hint');
+    const progress = scope.querySelector('.read-progress');
+    if (!scrollEl) return;
+
+    let lastScroll = 0;
+    let ticking = false;
+    scrollEl.addEventListener('scroll', () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const current = scrollEl.scrollTop;
+        const delta = current - lastScroll;
+
+        // reading progress on Page view
+        if (progress) {
+          const max = scrollEl.scrollHeight - scrollEl.clientHeight;
+          const pct = max > 0 ? Math.min(100, (current / max) * 100) : 0;
+          progress.style.width = pct + '%';
+        }
+
+        if (fab) {
+          if (current < 30) {
+            fab.classList.remove('compact');
+            if (hint) hint.classList.remove('hide');
+          } else if (delta > 5) {
+            fab.classList.add('compact');
+            if (hint) hint.classList.add('hide');
+          } else if (delta < -5) {
+            fab.classList.remove('compact');
+            if (hint) hint.classList.remove('hide');
+          }
+        }
+        lastScroll = current;
+        ticking = false;
+      });
+    });
+  }
+
+  document.querySelectorAll('.frame-wrap').forEach(setupScrollAware);
+</script>
+
+</body>
+</html>

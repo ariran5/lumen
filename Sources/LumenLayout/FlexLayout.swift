@@ -4,6 +4,7 @@ import Foundation
 public enum FlexDirection: Sendable { case row, column }
 public enum FlexJustify: Sendable { case start, center, end, spaceBetween, spaceAround, spaceEvenly }
 public enum FlexAlign: Sendable { case start, center, end, stretch }
+public enum FlexPosition: Sendable { case relative, absolute }
 
 public enum FlexDimension: Sendable, Equatable {
     case auto
@@ -42,6 +43,15 @@ public struct FlexStyle: Sendable {
     public var flex: Double = 0
     public var padding: FlexInsets = .zero
     public var gap: Double = 0
+
+    // Absolute positioning: ребёнок с position=absolute исключается из flow
+    // родителя, позиционируется через top/right/bottom/left относительно
+    // содержимого parent'а (padding учитывается). Z-order — порядок объявления.
+    public var position: FlexPosition = .relative
+    public var top: Double? = nil
+    public var right: Double? = nil
+    public var bottom: Double? = nil
+    public var left: Double? = nil
 
     public init() {}
 }
@@ -109,12 +119,21 @@ enum FlexLayoutEngine {
         let mainAvailable = isRow ? contentW : contentH
         let crossAvailable = isRow ? contentH : contentW
 
+        // Absolute children excluded from flow distribution; они получают
+        // отдельный pass с позиционированием через top/right/bottom/left.
+        let flowChildren = node.children.enumerated().filter {
+            $0.element.style.position == .relative
+        }
+        let absoluteChildren = node.children.enumerated().filter {
+            $0.element.style.position == .absolute
+        }
+
         var fixedMain: Double = 0
         var totalFlex: Double = 0
         var resolvedMains: [Double] = Array(repeating: 0, count: node.children.count)
         var resolvedCrosses: [Double] = Array(repeating: 0, count: node.children.count)
 
-        for (i, child) in node.children.enumerated() {
+        for (i, child) in flowChildren {
             let cs = child.style
             let mainDim = isRow ? cs.width : cs.height
             let crossDim = isRow ? cs.height : cs.width
@@ -132,37 +151,44 @@ enum FlexLayoutEngine {
             } else if cs.flex > 0 {
                 totalFlex += cs.flex
             } else {
-                if let measure = child.measure {
-                    let probeMain = isRow ? mainAvailable : crossAvailable
-                    let probeCross = isRow ? crossAvailable : mainAvailable
-                    let m = measure(CGSize(width: isRow ? probeMain : probeCross,
-                                            height: isRow ? probeCross : probeMain))
-                    let mainFromMeasure = isRow ? m.width : m.height
-                    resolvedMains[i] = clamp(mainFromMeasure, min: mainMin, max: mainMax)
-                    fixedMain += resolvedMains[i]
-                } else {
-                    resolvedMains[i] = 0
-                }
+                // Нет ни explicit, ни flex — берём intrinsic размер. Для text
+                // leaf'а это measure callback; для контейнера — bounding box
+                // детей + padding + gap (рекурсивно).
+                let intrinsic = intrinsicSize(child,
+                                              available: CGSize(width: mainAvailable,
+                                                                height: crossAvailable),
+                                              isParentRow: isRow)
+                let mainFromIntrinsic = isRow ? intrinsic.width : intrinsic.height
+                resolvedMains[i] = clamp(mainFromIntrinsic, min: mainMin, max: mainMax)
+                fixedMain += resolvedMains[i]
             }
 
             if let c = resolvedCrossExplicit {
                 resolvedCrosses[i] = c
-            } else if cs.alignItems == .stretch || node.style.alignItems == .stretch {
+            } else if node.style.alignItems == .stretch {
                 resolvedCrosses[i] = crossAvailable
             } else if let measure = child.measure {
                 let m = measure(CGSize(width: isRow ? resolvedMains[i] : crossAvailable,
                                         height: isRow ? crossAvailable : resolvedMains[i]))
                 resolvedCrosses[i] = clamp(isRow ? m.height : m.width, min: crossMin, max: crossMax)
+            } else if !child.children.isEmpty {
+                // Контейнер без explicit cross — измерим intrinsic.
+                let intrinsic = intrinsicSize(child,
+                                              available: CGSize(width: mainAvailable,
+                                                                height: crossAvailable),
+                                              isParentRow: isRow)
+                let crossFromIntrinsic = isRow ? intrinsic.height : intrinsic.width
+                resolvedCrosses[i] = clamp(crossFromIntrinsic, min: crossMin, max: crossMax)
             } else {
                 resolvedCrosses[i] = 0
             }
         }
 
-        let gapsTotal = node.style.gap * Double(max(0, node.children.count - 1))
+        let gapsTotal = node.style.gap * Double(max(0, flowChildren.count - 1))
         let remaining = max(0, mainAvailable - fixedMain - gapsTotal)
 
         if totalFlex > 0 {
-            for (i, child) in node.children.enumerated() where child.style.flex > 0 {
+            for (i, child) in flowChildren where child.style.flex > 0 {
                 let share = remaining * (child.style.flex / totalFlex)
                 let mainMin = isRow ? child.style.minWidth : child.style.minHeight
                 let mainMax = isRow ? child.style.maxWidth : child.style.maxHeight
@@ -170,7 +196,8 @@ enum FlexLayoutEngine {
             }
         }
 
-        let occupiedMain = resolvedMains.reduce(0, +) + gapsTotal
+        // Sum только по flow-детям (absolute не contributes к flow distribution).
+        let occupiedMain = flowChildren.reduce(0.0) { $0 + resolvedMains[$1.offset] } + gapsTotal
         let freeMain = max(0, mainAvailable - occupiedMain)
 
         var cursor: Double
@@ -185,21 +212,21 @@ enum FlexLayoutEngine {
             cursor = freeMain
         case .spaceBetween:
             cursor = 0
-            if node.children.count > 1 {
-                spacing = node.style.gap + freeMain / Double(node.children.count - 1)
+            if flowChildren.count > 1 {
+                spacing = node.style.gap + freeMain / Double(flowChildren.count - 1)
             }
         case .spaceAround:
-            spacing = node.style.gap + freeMain / Double(max(1, node.children.count))
+            spacing = node.style.gap + freeMain / Double(max(1, flowChildren.count))
             cursor = spacing / 2 - node.style.gap / 2
         case .spaceEvenly:
-            spacing = node.style.gap + freeMain / Double(node.children.count + 1)
+            spacing = node.style.gap + freeMain / Double(flowChildren.count + 1)
             cursor = spacing - node.style.gap
         }
 
         let mainBase = isRow ? origin.x + pad.left : origin.y + pad.top
         let crossBase = isRow ? origin.y + pad.top : origin.x + pad.left
 
-        for (i, child) in node.children.enumerated() {
+        for (i, child) in flowChildren {
             let childMain = resolvedMains[i]
             let childCross = resolvedCrosses[i]
 
@@ -228,6 +255,61 @@ enum FlexLayoutEngine {
             FlexLayoutEngine.layout(node: child, available: childAvailable, origin: childOrigin)
 
             cursor += childMain + spacing
+        }
+
+        // Absolute children: позиционируются по top/right/bottom/left
+        // относительно content-box parent'а (т.е. с учётом padding).
+        for (_, child) in absoluteChildren {
+            let cs = child.style
+
+            // Width
+            let childWidth: Double
+            if case .points(let v) = cs.width {
+                childWidth = clamp(v, min: cs.minWidth, max: cs.maxWidth)
+            } else if case .percent(let p) = cs.width {
+                childWidth = clamp(contentW * p / 100, min: cs.minWidth, max: cs.maxWidth)
+            } else if let l = cs.left, let r = cs.right {
+                childWidth = clamp(max(0, contentW - l - r),
+                                    min: cs.minWidth, max: cs.maxWidth)
+            } else {
+                let i = intrinsicSize(child,
+                                      available: CGSize(width: contentW, height: contentH),
+                                      isParentRow: isRow)
+                childWidth = clamp(i.width, min: cs.minWidth, max: cs.maxWidth)
+            }
+
+            // Height
+            let childHeight: Double
+            if case .points(let v) = cs.height {
+                childHeight = clamp(v, min: cs.minHeight, max: cs.maxHeight)
+            } else if case .percent(let p) = cs.height {
+                childHeight = clamp(contentH * p / 100, min: cs.minHeight, max: cs.maxHeight)
+            } else if let t = cs.top, let b = cs.bottom {
+                childHeight = clamp(max(0, contentH - t - b),
+                                     min: cs.minHeight, max: cs.maxHeight)
+            } else {
+                let i = intrinsicSize(child,
+                                      available: CGSize(width: contentW, height: contentH),
+                                      isParentRow: isRow)
+                childHeight = clamp(i.height, min: cs.minHeight, max: cs.maxHeight)
+            }
+
+            // Position. left имеет приоритет над right; top — над bottom.
+            let xOffset: Double
+            if let l = cs.left { xOffset = pad.left + l }
+            else if let r = cs.right { xOffset = pad.left + contentW - childWidth - r }
+            else { xOffset = pad.left }
+
+            let yOffset: Double
+            if let t = cs.top { yOffset = pad.top + t }
+            else if let b = cs.bottom { yOffset = pad.top + contentH - childHeight - b }
+            else { yOffset = pad.top }
+
+            FlexLayoutEngine.layout(
+                node: child,
+                available: CGSize(width: childWidth, height: childHeight),
+                origin: CGPoint(x: origin.x + xOffset, y: origin.y + yOffset)
+            )
         }
 
         node.frame = CGRect(origin: origin, size: CGSize(width: width, height: height))
@@ -260,5 +342,72 @@ enum FlexLayoutEngine {
 
     private static func clamp(_ v: Double, min: Double, max: Double) -> Double {
         Swift.min(Swift.max(v, min), max)
+    }
+
+    /// Intrinsic (shrink-to-fit) размер узла. Не учитывает `flex` (потому что
+    /// flex — это растяжение в свободном пространстве родителя, а тут мы
+    /// меряем минимально необходимое). Учитывает explicit width/height,
+    /// measure callback (для текста и т.п.), и рекурсивно — детей.
+    ///
+    /// `isParentRow` нужен только для clamp по min/max — сам intrinsic
+    /// считается в координатах самого узла, не зависит от ориентации parent.
+    fileprivate static func intrinsicSize(_ node: FlexNode,
+                                          available: CGSize,
+                                          isParentRow: Bool) -> CGSize {
+        let explicitW = resolveExplicit(node.style.width,
+                                        parent: available.width,
+                                        min: node.style.minWidth,
+                                        max: node.style.maxWidth)
+        let explicitH = resolveExplicit(node.style.height,
+                                        parent: available.height,
+                                        min: node.style.minHeight,
+                                        max: node.style.maxHeight)
+
+        // Leaf: measure callback или 0.
+        if node.children.isEmpty {
+            if let measure = node.measure {
+                let m = measure(available)
+                return CGSize(
+                    width: explicitW ?? clamp(m.width, min: node.style.minWidth, max: node.style.maxWidth),
+                    height: explicitH ?? clamp(m.height, min: node.style.minHeight, max: node.style.maxHeight)
+                )
+            }
+            return CGSize(width: explicitW ?? 0, height: explicitH ?? 0)
+        }
+
+        // Контейнер: bounding box детей + padding + gaps.
+        let pad = node.style.padding
+        let isRow = node.style.direction == .row
+        let gap = node.style.gap
+        let innerAvailable = CGSize(
+            width: Swift.max(0, available.width - pad.left - pad.right),
+            height: Swift.max(0, available.height - pad.top - pad.bottom)
+        )
+
+        var mainSum: Double = 0
+        var crossMax: Double = 0
+        let flowChildren = node.children.filter { $0.style.position == .relative }
+        for (i, child) in flowChildren.enumerated() {
+            // flex>0 ребёнок не имеет intrinsic размера в main axis (только
+            // от родителя), но имеет свой cross. Для intrinsic main считаем
+            // 0 — это shrink-to-fit, не grow-to-fill. Absolute дети исключены
+            // целиком — они out-of-flow.
+            let cs = intrinsicSize(child, available: innerAvailable, isParentRow: isRow)
+            let childMain = isRow ? cs.width : cs.height
+            let childCross = isRow ? cs.height : cs.width
+            mainSum += (child.style.flex > 0) ? 0 : childMain
+            if i > 0 { mainSum += gap }
+            crossMax = Swift.max(crossMax, childCross)
+        }
+
+        let intrinsicMain = mainSum + (isRow ? pad.left + pad.right : pad.top + pad.bottom)
+        let intrinsicCross = crossMax + (isRow ? pad.top + pad.bottom : pad.left + pad.right)
+        let width: Double = isRow ? intrinsicMain : intrinsicCross
+        let height: Double = isRow ? intrinsicCross : intrinsicMain
+
+        return CGSize(
+            width: explicitW ?? clamp(width, min: node.style.minWidth, max: node.style.maxWidth),
+            height: explicitH ?? clamp(height, min: node.style.minHeight, max: node.style.maxHeight)
+        )
     }
 }

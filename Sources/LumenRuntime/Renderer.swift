@@ -4,17 +4,63 @@ import JavaScriptCore
 import QuartzCore
 import UIKit
 
+/// Узел смонтированного дерева. Зеркалит RenderNode, но удерживает живой
+/// CALayer и текущее состояние — на этом diff умеет переиспользовать
+/// слои между рендерами, не сбрасывая sublayers/animations/contents.
+@MainActor
+final class MountedNode {
+    var node: RenderNode
+    var layer: CALayer
+    var children: [MountedNode]
+    var loadedImageSource: String?
+
+    // virtualList overlay: UICollectionView сидит как subview hostView,
+    // а её frame ведётся по `layer` в absolute координатах rootLayer.
+    var virtualListView: VirtualListView?
+    var virtualListController: VirtualListController?
+
+    // textInput overlay: native UITextField субвьюхой hostView.
+    var textInputView: LumenTextField?
+    var textInputController: TextInputController?
+
+    // scroll overlay: UIScrollView с nested Renderer'ом внутри contentView.
+    var scrollView: LumenScrollView?
+
+    // blur overlay: UIVisualEffectView с nested Renderer'ом внутри contentView.
+    var blurView: LumenBlurView?
+
+    init(node: RenderNode, layer: CALayer) {
+        self.node = node
+        self.layer = layer
+        self.children = []
+    }
+}
+
 @MainActor
 final class Renderer {
+    enum ContentMode {
+        /// Дочерние узлы растягиваются под bounds родителя (стандартный режим).
+        case stretch
+        /// Layout считается с `height: .greatestFiniteMagnitude` — нужно для
+        /// scroll-контента, где высота определяется суммой детей, а не родителя.
+        /// `computedContentHeight()` возвращает реальную высоту после layout.
+        case scrollContent
+    }
+
     let rootLayer: CALayer
     private weak var hostView: UIView?
 
+    var contentMode: ContentMode = .stretch
+
     private var lastTree: RenderNode?
+    private var mountedRoot: MountedNode?
+    private var lastFlexRoot: FlexNode?
 
     private(set) var lastLayerCount: Int = 0
     private(set) var lastRenderMs: Double = 0
+    private(set) var lastDiffMs: Double = 0
 
-    private var tapHandlers: [ObjectIdentifier: JSValue] = [:]
+    private var gestureRouter: GestureRouter?
 
     init(rootLayer: CALayer) {
         self.rootLayer = rootLayer
@@ -24,7 +70,15 @@ final class Renderer {
     convenience init(hostView: UIView) {
         self.init(rootLayer: hostView.layer)
         self.hostView = hostView
-        installTapGesture(on: hostView)
+        gestureRouter = GestureRouter(host: hostView, rootLayer: hostView.layer)
+    }
+
+    /// Returns the maximum Y-extent of the root's children + bottom padding.
+    /// Используется ScrollView для определения contentSize.
+    func computedContentHeight() -> CGFloat {
+        guard let root = lastFlexRoot else { return 0 }
+        let maxY = root.children.map { $0.frame.maxY }.max() ?? 0
+        return maxY + CGFloat(root.style.padding.bottom)
     }
 
     func render(_ tree: RenderNode) {
@@ -37,33 +91,56 @@ final class Renderer {
     /// UICollectionView as a subview).
     func detach() {
         lastTree = nil
+        mountedRoot = nil
         rootLayer.sublayers?.forEach { $0.removeFromSuperlayer() }
-        tapHandlers.removeAll(keepingCapacity: false)
+        gestureRouter?.clear()
     }
 
     func relayout() {
         guard let tree = lastTree else { return }
-        let size = rootLayer.bounds.size
-        guard size.width > 0, size.height > 0 else { return }
+        var size = rootLayer.bounds.size
+        guard size.width > 0 else { return }
+        if contentMode == .scrollContent {
+            // Scroll-режим: высота не должна ограничивать layout. Дети
+            // получат свои intrinsic размеры и натурально стэкнутся сверху.
+            size.height = .greatestFiniteMagnitude
+        } else if size.height <= 0 {
+            return
+        }
 
         let start = CFAbsoluteTimeGetCurrent()
 
         let flex = buildFlex(tree)
         flex.calculateLayout(width: Double(size.width), height: Double(size.height))
+        lastFlexRoot = flex
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
 
-        rootLayer.sublayers?.forEach { $0.removeFromSuperlayer() }
-        tapHandlers.removeAll(keepingCapacity: true)
         var counter = 0
-        mount(node: tree, flex: flex, parent: rootLayer, parentOrigin: .zero, counter: &counter)
+        if let root = mountedRoot {
+            reconcile(parent: rootLayer,
+                      parentOrigin: .zero,
+                      mounted: root,
+                      next: tree,
+                      flex: flex,
+                      counter: &counter)
+        } else {
+            mountedRoot = mountFresh(parent: rootLayer,
+                                     parentOrigin: .zero,
+                                     node: tree,
+                                     flex: flex,
+                                     counter: &counter)
+        }
         lastLayerCount = counter
 
         CATransaction.commit()
 
         lastRenderMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
+        RenderMetrics.shared.record(lastRenderMs)
     }
+
+    // MARK: - Flex tree
 
     private func buildFlex(_ node: RenderNode) -> FlexNode {
         let f = FlexNode(style: node.style.flex)
@@ -79,34 +156,364 @@ final class Renderer {
         return f
     }
 
-    private func mount(node: RenderNode,
-                       flex: FlexNode,
-                       parent: CALayer,
-                       parentOrigin: CGPoint,
-                       counter: inout Int) {
+    // MARK: - Fresh mount
+
+    private func mountFresh(parent: CALayer,
+                            parentOrigin: CGPoint,
+                            node: RenderNode,
+                            flex: FlexNode,
+                            counter: inout Int) -> MountedNode {
         let layer = makeLayer(for: node)
-        layer.frame = CGRect(
-            x: flex.frame.minX - parentOrigin.x,
-            y: flex.frame.minY - parentOrigin.y,
-            width: flex.frame.width,
-            height: flex.frame.height
+        parent.addSublayer(layer)
+        let mount = MountedNode(node: node, layer: layer)
+        applyAll(layer: layer, mount: mount, node: node, flex: flex, parentOrigin: parentOrigin)
+        counter += 1
+
+        if node.kind == .virtualList {
+            mountVirtualList(mount: mount, node: node, flex: flex)
+            return mount  // virtualList не имеет CALayer-детей
+        }
+
+        if node.kind == .textInput {
+            mountTextInput(mount: mount, node: node, flex: flex)
+            return mount
+        }
+
+        if node.kind == .scroll {
+            mountScroll(mount: mount, node: node, flex: flex)
+            return mount
+        }
+
+        if node.kind == .blur {
+            mountBlur(mount: mount, node: node, flex: flex)
+            return mount
+        }
+
+        let myOrigin = CGPoint(x: flex.frame.minX, y: flex.frame.minY)
+        for (cn, cf) in zip(node.children, flex.children) {
+            let cm = mountFresh(parent: layer,
+                                parentOrigin: myOrigin,
+                                node: cn,
+                                flex: cf,
+                                counter: &counter)
+            mount.children.append(cm)
+        }
+        return mount
+    }
+
+    private func mountVirtualList(mount: MountedNode, node: RenderNode, flex: FlexNode) {
+        guard let host = hostView, let renderFn = node.listRenderFn else { return }
+        let absoluteFrame = flex.frame
+        let controller = VirtualListController(count: node.listCount,
+                                               itemHeight: node.listItemHeight,
+                                               renderFn: renderFn)
+        let view = VirtualListView(controller: controller, frame: absoluteFrame)
+        host.addSubview(view)
+        mount.virtualListController = controller
+        mount.virtualListView = view
+    }
+
+    private func mountScroll(mount: MountedNode, node: RenderNode, flex: FlexNode) {
+        guard let host = hostView else { return }
+        let frame = flex.frame
+        let sv = LumenScrollView(frame: frame)
+        sv.onScrollHandler = node.onScroll
+        host.addSubview(sv)
+        sv.renderContent(children: node.children, wrapperStyle: node.style)
+        mount.scrollView = sv
+    }
+
+    private func mountBlur(mount: MountedNode, node: RenderNode, flex: FlexNode) {
+        guard let host = hostView else { return }
+        let frame = flex.frame
+        let bv = LumenBlurView(frame: frame, intensity: node.blurIntensity)
+        host.addSubview(bv)
+        bv.update(intensity: node.blurIntensity,
+                  children: node.children,
+                  wrapperStyle: node.style)
+        // corner radius/border применяются к самому wrapper'у — внешний layer
+        // отвечает за clip, а внутри effectView рендерится контент.
+        bv.layer.cornerRadius = CGFloat(node.style.borderRadius)
+        bv.layer.masksToBounds = node.style.borderRadius > 0
+        if let borderColor = node.style.borderColor {
+            bv.layer.borderColor = borderColor
+            bv.layer.borderWidth = CGFloat(node.style.borderWidth)
+        }
+        mount.blurView = bv
+    }
+
+    private func mountTextInput(mount: MountedNode, node: RenderNode, flex: FlexNode) {
+        guard let host = hostView else { return }
+        let field = LumenTextField(frame: flex.frame)
+        let controller = TextInputController()
+        controller.attach(field)
+        controller.apply(value: node.inputValue,
+                         placeholder: node.inputPlaceholder,
+                         style: node.style,
+                         keyboardType: node.inputKeyboardType,
+                         returnKey: node.inputReturnKey,
+                         autocapitalize: node.inputAutocapitalize,
+                         autocorrect: node.inputAutocorrect,
+                         secure: node.inputSecure,
+                         onChange: node.onInputChange,
+                         onSubmit: node.onInputSubmit,
+                         onFocus: node.onInputFocus,
+                         onBlur: node.onInputBlur)
+        host.addSubview(field)
+        mount.textInputView = field
+        mount.textInputController = controller
+    }
+
+    // MARK: - Reconcile
+
+    private func reconcile(parent: CALayer,
+                           parentOrigin: CGPoint,
+                           mounted: MountedNode,
+                           next: RenderNode,
+                           flex: FlexNode,
+                           counter: inout Int) {
+        if mounted.node.kind != next.kind {
+            // Тип сменился — снести и перемонтировать в той же позиции
+            // в parent.sublayers. Indexing внутри parent сохраняется,
+            // потому что в `reconcile` родителя мы ходим index-by-index.
+            removeMountTree(mounted)
+            let layer = makeLayer(for: next)
+            parent.addSublayer(layer)
+            mounted.layer = layer
+            mounted.children = []
+            mounted.loadedImageSource = nil
+            mounted.virtualListView = nil
+            mounted.virtualListController = nil
+            mounted.textInputView = nil
+            mounted.textInputController = nil
+            mounted.scrollView = nil
+            mounted.blurView = nil
+            applyAll(layer: layer, mount: mounted, node: next, flex: flex, parentOrigin: parentOrigin)
+            counter += 1
+
+            if next.kind == .virtualList {
+                mountVirtualList(mount: mounted, node: next, flex: flex)
+            } else if next.kind == .textInput {
+                mountTextInput(mount: mounted, node: next, flex: flex)
+            } else if next.kind == .scroll {
+                mountScroll(mount: mounted, node: next, flex: flex)
+            } else if next.kind == .blur {
+                mountBlur(mount: mounted, node: next, flex: flex)
+            } else {
+                let myOrigin = CGPoint(x: flex.frame.minX, y: flex.frame.minY)
+                for (cn, cf) in zip(next.children, flex.children) {
+                    let cm = mountFresh(parent: layer,
+                                        parentOrigin: myOrigin,
+                                        node: cn,
+                                        flex: cf,
+                                        counter: &counter)
+                    mounted.children.append(cm)
+                }
+            }
+            mounted.node = next
+            return
+        }
+
+        // Тот же kind: переиспользуем layer, применяем дельту.
+        applyAll(layer: mounted.layer,
+                 mount: mounted,
+                 node: next,
+                 flex: flex,
+                 parentOrigin: parentOrigin)
+        counter += 1
+
+        if next.kind == .virtualList {
+            reconcileVirtualList(mount: mounted, node: next, flex: flex)
+            mounted.node = next
+            return
+        }
+
+        if next.kind == .textInput {
+            reconcileTextInput(mount: mounted, node: next, flex: flex)
+            mounted.node = next
+            return
+        }
+
+        if next.kind == .scroll {
+            reconcileScroll(mount: mounted, node: next, flex: flex)
+            mounted.node = next
+            return
+        }
+
+        if next.kind == .blur {
+            reconcileBlur(mount: mounted, node: next, flex: flex)
+            mounted.node = next
+            return
+        }
+
+        // Index-based reconcile детей (без key-LIS пока).
+        let myOrigin = CGPoint(x: flex.frame.minX, y: flex.frame.minY)
+        let prevCount = mounted.children.count
+        let nextCount = next.children.count
+        let common = min(prevCount, nextCount)
+
+        for i in 0..<common {
+            reconcile(parent: mounted.layer,
+                      parentOrigin: myOrigin,
+                      mounted: mounted.children[i],
+                      next: next.children[i],
+                      flex: flex.children[i],
+                      counter: &counter)
+        }
+        if nextCount > prevCount {
+            for i in common..<nextCount {
+                let cm = mountFresh(parent: mounted.layer,
+                                    parentOrigin: myOrigin,
+                                    node: next.children[i],
+                                    flex: flex.children[i],
+                                    counter: &counter)
+                mounted.children.append(cm)
+            }
+        } else if prevCount > nextCount {
+            for i in (common..<prevCount).reversed() {
+                removeMountTree(mounted.children[i])
+                mounted.children.remove(at: i)
+            }
+        }
+
+        mounted.node = next
+    }
+
+    private func removeMountTree(_ mount: MountedNode) {
+        gestureRouter?.removeHandlers(for: mount.layer)
+        AnimationManager.shared.unbindLayer(mount.layer)
+        mount.layer.removeFromSuperlayer()
+        mount.virtualListView?.removeFromSuperview()
+        mount.virtualListView = nil
+        mount.virtualListController = nil
+        mount.textInputView?.removeFromSuperview()
+        mount.textInputView = nil
+        mount.textInputController = nil
+        mount.scrollView?.removeFromSuperview()
+        mount.scrollView = nil
+        mount.blurView?.removeFromSuperview()
+        mount.blurView = nil
+        for child in mount.children {
+            removeMountTree(child)
+        }
+    }
+
+    private func reconcileBlur(mount: MountedNode, node: RenderNode, flex: FlexNode) {
+        let frame = flex.frame
+        if let bv = mount.blurView {
+            if bv.frame != frame { bv.frame = frame }
+            bv.update(intensity: node.blurIntensity,
+                      children: node.children,
+                      wrapperStyle: node.style)
+            bv.layer.cornerRadius = CGFloat(node.style.borderRadius)
+            bv.layer.masksToBounds = node.style.borderRadius > 0
+            if let borderColor = node.style.borderColor {
+                bv.layer.borderColor = borderColor
+                bv.layer.borderWidth = CGFloat(node.style.borderWidth)
+            } else {
+                bv.layer.borderWidth = 0
+            }
+        } else {
+            mountBlur(mount: mount, node: node, flex: flex)
+        }
+    }
+
+    private func reconcileScroll(mount: MountedNode, node: RenderNode, flex: FlexNode) {
+        let frame = flex.frame
+        if let sv = mount.scrollView {
+            if sv.frame != frame { sv.frame = frame }
+            sv.onScrollHandler = node.onScroll
+            sv.renderContent(children: node.children, wrapperStyle: node.style)
+        } else {
+            mountScroll(mount: mount, node: node, flex: flex)
+        }
+    }
+
+    private func reconcileTextInput(mount: MountedNode, node: RenderNode, flex: FlexNode) {
+        let frame = flex.frame
+        if let field = mount.textInputView {
+            if field.frame != frame { field.frame = frame }
+            mount.textInputController?.apply(
+                value: node.inputValue,
+                placeholder: node.inputPlaceholder,
+                style: node.style,
+                keyboardType: node.inputKeyboardType,
+                returnKey: node.inputReturnKey,
+                autocapitalize: node.inputAutocapitalize,
+                autocorrect: node.inputAutocorrect,
+                secure: node.inputSecure,
+                onChange: node.onInputChange,
+                onSubmit: node.onInputSubmit,
+                onFocus: node.onInputFocus,
+                onBlur: node.onInputBlur
+            )
+        } else {
+            mountTextInput(mount: mount, node: node, flex: flex)
+        }
+    }
+
+    private func reconcileVirtualList(mount: MountedNode, node: RenderNode, flex: FlexNode) {
+        let absoluteFrame = flex.frame
+        if let view = mount.virtualListView {
+            if view.frame != absoluteFrame {
+                view.frame = absoluteFrame
+            }
+            if let renderFn = node.listRenderFn {
+                mount.virtualListController?.update(count: node.listCount,
+                                                    itemHeight: node.listItemHeight,
+                                                    renderFn: renderFn)
+            }
+        } else {
+            // Появилась virtualList на reconcile (например после kind swap'а
+            // или впервые) — mount.
+            mountVirtualList(mount: mount, node: node, flex: flex)
+        }
+    }
+
+    // MARK: - Apply props
+
+    private func applyAll(layer: CALayer,
+                          mount: MountedNode,
+                          node: RenderNode,
+                          flex: FlexNode,
+                          parentOrigin: CGPoint) {
+        // bounds + position, не frame: frame setter компенсирует transform,
+        // из-за чего translateX/Y не даёт визуального движения.
+        // Custom hit-test walker (см. GestureRouter) умеет читать transformed
+        // layer.frame, так что hit-area следует за transform автоматически.
+        let bounds = CGRect(x: 0, y: 0,
+                            width: flex.frame.width,
+                            height: flex.frame.height)
+        let position = CGPoint(
+            x: flex.frame.midX - parentOrigin.x,
+            y: flex.frame.midY - parentOrigin.y
         )
+        if layer.bounds != bounds { layer.bounds = bounds }
+        if layer.position != position { layer.position = position }
+
         applyVisualStyle(layer, style: node.style)
+
         if node.kind == .text, let textLayer = layer as? CATextLayer, let text = node.text {
             applyTextStyle(textLayer, text: text, style: node.style)
         }
         if node.kind == .image, let src = node.source {
-            applyImage(layer: layer, source: src, style: node.style)
+            applyContentMode(layer, contentMode: node.style.contentMode)
+            if mount.loadedImageSource != src {
+                applyImage(layer: layer, source: src)
+                mount.loadedImageSource = src
+            }
         }
-        if let onTap = node.onTap {
-            tapHandlers[ObjectIdentifier(layer)] = onTap
-        }
-        parent.addSublayer(layer)
-        counter += 1
 
-        let myOrigin = CGPoint(x: flex.frame.minX, y: flex.frame.minY)
-        for (cn, cf) in zip(node.children, flex.children) {
-            mount(node: cn, flex: cf, parent: layer, parentOrigin: myOrigin, counter: &counter)
+        if let router = gestureRouter {
+            var g = LayerGestures()
+            g.onTap = node.onTap
+            g.onDoubleTap = node.onDoubleTap
+            g.onLongPress = node.onLongPress
+            g.onPan = node.onPan
+            g.onSwipe = node.onSwipe
+            g.onPinch = node.onPinch
+            g.onRotate = node.onRotate
+            router.setHandlers(g, for: layer)
         }
     }
 
@@ -140,18 +547,64 @@ final class Renderer {
     private func applyVisualStyle(_ layer: CALayer, style: ViewStyle) {
         layer.backgroundColor = style.backgroundColor
         layer.cornerRadius = CGFloat(style.borderRadius)
-        layer.opacity = Float(style.opacity)
         if let borderColor = style.borderColor {
             layer.borderColor = borderColor
             layer.borderWidth = CGFloat(style.borderWidth)
+        } else {
+            layer.borderWidth = 0
         }
-        if style.borderRadius > 0 {
-            layer.masksToBounds = true
+        layer.masksToBounds = style.borderRadius > 0
+
+        // transform + opacity: либо delegate в AnimationManager (если есть
+        // AnimatedValue-биндинги), либо прямой apply как раньше.
+        if style.hasAnimBindings {
+            var animIds: [AnimationManager.Property: Int] = [:]
+            if let id = style.transform.translateXAnimId { animIds[.translateX] = id }
+            if let id = style.transform.translateYAnimId { animIds[.translateY] = id }
+            if let id = style.transform.scaleAnimId { animIds[.scale] = id }
+            if let id = style.transform.scaleXAnimId { animIds[.scaleX] = id }
+            if let id = style.transform.scaleYAnimId { animIds[.scaleY] = id }
+            if let id = style.transform.rotateAnimId { animIds[.rotate] = id }
+            if let id = style.opacityAnimId { animIds[.opacity] = id }
+
+            AnimationManager.shared.bindLayer(
+                layer,
+                animIds: animIds,
+                staticTranslateX: style.transform.translateX,
+                staticTranslateY: style.transform.translateY,
+                staticScale: style.transform.scale,
+                staticScaleX: style.transform.scaleX,
+                staticScaleY: style.transform.scaleY,
+                staticRotate: style.transform.rotate,
+                staticOpacity: style.opacity
+            )
+        } else {
+            // На случай если layer раньше был animated, а сейчас перестал быть —
+            // снять биндинги, чтобы AnimatedValue.set не мутировал чужой layer.
+            AnimationManager.shared.unbindLayer(layer)
+            layer.opacity = Float(style.opacity)
+
+            let t = style.transform
+            if t.isIdentity {
+                layer.transform = CATransform3DIdentity
+            } else {
+                var m = CATransform3DIdentity
+                m = CATransform3DTranslate(m, CGFloat(t.translateX), CGFloat(t.translateY), 0)
+                if t.rotate != 0 {
+                    m = CATransform3DRotate(m, CGFloat(t.rotate), 0, 0, 1)
+                }
+                let sx = t.scaleX * t.scale
+                let sy = t.scaleY * t.scale
+                if sx != 1 || sy != 1 {
+                    m = CATransform3DScale(m, CGFloat(sx), CGFloat(sy), 1)
+                }
+                layer.transform = m
+            }
         }
     }
 
-    private func applyImage(layer: CALayer, source: String, style: ViewStyle) {
-        switch style.contentMode {
+    private func applyContentMode(_ layer: CALayer, contentMode: String) {
+        switch contentMode {
         case "cover":    layer.contentsGravity = .resizeAspectFill
         case "contain":  layer.contentsGravity = .resizeAspect
         case "stretch":  layer.contentsGravity = .resize
@@ -159,7 +612,9 @@ final class Renderer {
         default:         layer.contentsGravity = .resizeAspectFill
         }
         layer.masksToBounds = true
+    }
 
+    private func applyImage(layer: CALayer, source: String) {
         guard let url = URL(string: source), let scheme = url.scheme,
               ["http", "https"].contains(scheme.lowercased()) else { return }
 
@@ -173,48 +628,4 @@ final class Renderer {
         }
     }
 
-    // MARK: Tap handling
-
-    private func installTapGesture(on host: UIView) {
-        let proxy = TapProxy(owner: self)
-        let recognizer = UITapGestureRecognizer(target: proxy, action: #selector(TapProxy.handle(_:)))
-        recognizer.cancelsTouchesInView = false
-        host.addGestureRecognizer(recognizer)
-        // Keep proxy alive as long as the recognizer is alive. Without this,
-        // the proxy is released when Renderer is deinit'd while the recognizer
-        // is still attached to the host's view, and accessibility scans crash
-        // following the unowned target ref.
-        objc_setAssociatedObject(recognizer,
-                                  &Renderer.tapProxyKey,
-                                  proxy,
-                                  .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-    }
-
-    private static var tapProxyKey: UInt8 = 0
-
-    fileprivate func handleTap(at point: CGPoint) {
-        guard !tapHandlers.isEmpty else { return }
-
-        var current: CALayer? = rootLayer.hitTest(point)
-
-        while let layer = current {
-            if let handler = tapHandlers[ObjectIdentifier(layer)] {
-                _ = handler.call(withArguments: [])
-                return
-            }
-            current = layer.superlayer
-        }
-    }
-}
-
-@MainActor
-private final class TapProxy: NSObject {
-    weak var owner: Renderer?
-    init(owner: Renderer) { self.owner = owner }
-
-    @objc func handle(_ recognizer: UITapGestureRecognizer) {
-        guard let owner, let view = recognizer.view else { return }
-        let point = recognizer.location(in: view)
-        owner.handleTap(at: point)
-    }
 }

@@ -1,12 +1,14 @@
+import os
 import SwiftUI
 import UIKit
 
 struct FastAppHost: UIViewControllerRepresentable {
     let url: URL
+    let tabID: UUID
     var onBundleName: ((String) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(url: url, onBundleName: onBundleName)
+        Coordinator(url: url, tabID: tabID, onBundleName: onBundleName)
     }
 
     func makeUIViewController(context: Context) -> UINavigationController {
@@ -16,36 +18,10 @@ struct FastAppHost: UIViewControllerRepresentable {
         nav.view.backgroundColor = UIColor(red: 0.06, green: 0.06, blue: 0.07, alpha: 1)
 
         rootPage.loadViewIfNeeded()
-        guard let rootRenderer = rootPage.renderer else { return nav }
 
-        let engine = JSEngine()
-        engine.installRenderBridge(renderer: rootRenderer)
-
-        engine.installVirtualListBridge { [weak nav] controller in
-            guard let topVC = nav?.topViewController, let host = topVC.view else { return }
-
-            if let page = topVC as? LumenPageViewController {
-                page.renderer?.detach()
-            }
-            host.subviews.forEach { $0.removeFromSuperview() }
-
-            let list = VirtualListView(controller: controller, frame: host.bounds)
-            list.translatesAutoresizingMaskIntoConstraints = false
-            host.addSubview(list)
-            NSLayoutConstraint.activate([
-                list.topAnchor.constraint(equalTo: host.topAnchor),
-                list.bottomAnchor.constraint(equalTo: host.bottomAnchor),
-                list.leadingAnchor.constraint(equalTo: host.leadingAnchor),
-                list.trailingAnchor.constraint(equalTo: host.trailingAnchor),
-            ])
-        }
-
-        engine.installRouterBridge(navController: nav)
-        engine.installPlatformBridges()
-
-        context.coordinator.engine = engine
         context.coordinator.nav = nav
         context.coordinator.rootPage = rootPage
+        context.coordinator.setupEngine()
 
         rootPage.onLayout = { [weak coord = context.coordinator] in
             coord?.loadIfNeeded()
@@ -76,15 +52,43 @@ struct FastAppHost: UIViewControllerRepresentable {
     @MainActor
     final class Coordinator {
         let url: URL
+        let tabID: UUID
         let onBundleName: ((String) -> Void)?
         var engine: JSEngine?
         var nav: UINavigationController?
         var rootPage: LumenPageViewController?
         var didLoad = false
 
-        init(url: URL, onBundleName: ((String) -> Void)?) {
+        private var devClient: DevServerClient?
+        private let jsLogger = os.Logger(subsystem: "com.lumen.js", category: "console")
+
+        init(url: URL, tabID: UUID, onBundleName: ((String) -> Void)?) {
             self.url = url
+            self.tabID = tabID
             self.onBundleName = onBundleName
+        }
+
+        /// Создать новый JSEngine, поставить все bridges, eval framework.
+        /// Вызывается изначально и при hot-reload.
+        func setupEngine() {
+            guard let rootPage, let nav, let rootRenderer = rootPage.renderer else { return }
+            let engine = JSEngine()
+            engine.onLog = { [weak self] level, msg in
+                print("[js \(level.rawValue)] \(msg)")
+                self?.jsLogger.info("\(level.rawValue, privacy: .public): \(msg, privacy: .public)")
+            }
+            engine.installRenderBridge(renderer: rootRenderer)
+            engine.installRouterBridge(navController: nav)
+            engine.installPlatformBridges()
+            engine.installTabsBridge(ownTabID: tabID)
+            engine.eval(CoreFramework.script)
+            self.engine = engine
+
+            // Push initial safe-area + подписаться на изменения
+            rootPage.onSafeAreaChange = { [weak engine] insets in
+                engine?.updateSafeArea(insets)
+            }
+            engine.updateSafeArea(rootPage.view.safeAreaInsets)
         }
 
         func loadIfNeeded() {
@@ -99,10 +103,48 @@ struct FastAppHost: UIViewControllerRepresentable {
                     self.onBundleName?(bundle.manifest.name)
                     self.nav?.topViewController?.title = bundle.manifest.name
                     _ = engine.eval(bundle.script)
+                    if bundle.manifest.dev == true {
+                        self.connectDevServer()
+                    }
                 } catch {
                     engine.eval("console.error('Bundle load failed: \(error.localizedDescription)')")
                 }
             }
+        }
+
+        private func connectDevServer() {
+            guard devClient == nil, let client = DevServerClient(baseURL: url) else { return }
+            client.onReload = { [weak self] in
+                print("[lumen] hot reload triggered")
+                self?.performReload()
+            }
+            client.connect()
+            self.devClient = client
+        }
+
+        private func performReload() {
+            guard let nav else { return }
+
+            // Animation state привязан к старым CALayer'ам, которые умрут после
+            // setViewControllers. Без reset id'ы AnimatedValue пересекутся со
+            // stale-записями (new context стартует ids с 1).
+            AnimationManager.shared.reset()
+
+            // Hot reload через полное пересоздание page + engine:
+            // старый rootPage / Renderer / VirtualListView освобождаются
+            // ARC'ом, и в дереве UIView не остаётся dangling-ссылок (была
+            // crash на _updateSafeAreaInsets после partial cleanup).
+            let newRoot = LumenPageViewController(title: nav.topViewController?.title)
+            newRoot.loadViewIfNeeded()
+            nav.setViewControllers([newRoot], animated: false)
+            self.rootPage = newRoot
+            newRoot.onLayout = { [weak self] in
+                self?.loadIfNeeded()
+            }
+
+            setupEngine()
+            didLoad = false
+            loadIfNeeded()
         }
     }
 }
