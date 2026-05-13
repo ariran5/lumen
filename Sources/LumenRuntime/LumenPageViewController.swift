@@ -26,18 +26,18 @@ final class LumenPageViewController: UIViewController {
 
     override func loadView() {
         let host = UIView()
-        host.backgroundColor = UIColor(red: 0.06, green: 0.06, blue: 0.07, alpha: 1)
+        host.backgroundColor = UIColor(red: 0.043, green: 0.043, blue: 0.059, alpha: 1)
         view = host
 
-        // contentView сидит под nav bar (top = safe area), но уходит за
-        // home indicator снизу (bottom = view bottom) — фуллскрин-ощущение
-        // сохраняется, шапка не накладывается.
+        // contentView фуллскрин — от top до bottom. Fast-app сам уважает
+        // `lumen.safeArea.top/bottom` в своей разметке (greeting/header).
+        // Без этого мы режем верхнюю часть и host-bg торчит над контентом.
         let content = UIView()
         content.backgroundColor = .clear
         content.translatesAutoresizingMaskIntoConstraints = false
         host.addSubview(content)
         NSLayoutConstraint.activate([
-            content.topAnchor.constraint(equalTo: host.safeAreaLayoutGuide.topAnchor),
+            content.topAnchor.constraint(equalTo: host.topAnchor),
             content.bottomAnchor.constraint(equalTo: host.bottomAnchor),
             content.leadingAnchor.constraint(equalTo: host.leadingAnchor),
             content.trailingAnchor.constraint(equalTo: host.trailingAnchor),

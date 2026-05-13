@@ -4,7 +4,7 @@ import JavaScriptCore
 
 struct RenderNode {
     enum Kind: String {
-        case view, text, image, scroll, pressable, virtualList, textInput, blur
+        case view, text, image, scroll, pressable, virtualList, textInput, blur, map
     }
 
     var kind: Kind = .view
@@ -50,6 +50,13 @@ struct RenderNode {
 
     // scroll-specific
     var onScroll: JSValue?
+
+    // map-specific
+    var mapRegion: MapRegionSpec?
+    var mapPins: [MapPinSpec] = []
+    var mapType: String = "standard"   // "standard" | "satellite" | "hybrid"
+    var onMapRegionChange: JSValue?
+    var onMapPinTap: JSValue?
 }
 
 private let gestureProps = [
@@ -115,6 +122,41 @@ extension RenderNode {
 
         if node.kind == .blur {
             if let i = string(value, "intensity") { node.blurIntensity = i }
+        }
+
+        if node.kind == .map {
+            // region: {lat, lon, latDelta, lonDelta}
+            if let r = subscript_(value, "region"), r.isObject {
+                let lat = r.objectForKeyedSubscript("lat")?.toDouble() ?? 0
+                let lon = r.objectForKeyedSubscript("lon")?.toDouble() ?? 0
+                let latD = r.objectForKeyedSubscript("latDelta")?.toDouble() ?? 0.05
+                let lonD = r.objectForKeyedSubscript("lonDelta")?.toDouble() ?? 0.05
+                node.mapRegion = MapRegionSpec(lat: lat, lon: lon,
+                                               latDelta: latD, lonDelta: lonD)
+            }
+            // pins: [{lat, lon, title?, id?}]
+            if let pinsVal = subscript_(value, "pins"), pinsVal.isArray {
+                let length = Int(pinsVal.objectForKeyedSubscript("length")?.toInt32() ?? 0)
+                node.mapPins.reserveCapacity(length)
+                for i in 0..<length {
+                    guard let p = pinsVal.atIndex(i), p.isObject else { continue }
+                    let lat = p.objectForKeyedSubscript("lat")?.toDouble() ?? 0
+                    let lon = p.objectForKeyedSubscript("lon")?.toDouble() ?? 0
+                    let title = p.objectForKeyedSubscript("title")?.toString()
+                    let idV = p.objectForKeyedSubscript("id")
+                    let id = (idV?.isUndefined == false && idV?.isNull == false)
+                        ? idV?.toString() : nil
+                    node.mapPins.append(MapPinSpec(lat: lat, lon: lon,
+                                                   title: title, id: id))
+                }
+            }
+            if let mt = string(value, "mapType") { node.mapType = mt }
+            if let v = subscript_(value, "onRegionChange"), v.isObject {
+                node.onMapRegionChange = v
+            }
+            if let v = subscript_(value, "onPinTap"), v.isObject {
+                node.onMapPinTap = v
+            }
         }
 
         if node.kind == .scroll {

@@ -12,6 +12,11 @@ struct WebTabView: UIViewRepresentable {
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.allowsBackForwardNavigationGestures = true
         webView.navigationDelegate = context.coordinator
+        // Чтобы во время load'а не вспыхивал стандартный белый WebKit-bg
+        // на тёмной shell-палитре.
+        webView.isOpaque = false
+        webView.backgroundColor = UIColor(red: 0.043, green: 0.043, blue: 0.059, alpha: 1)
+        webView.scrollView.backgroundColor = .clear
         context.coordinator.webView = webView
         return webView
     }

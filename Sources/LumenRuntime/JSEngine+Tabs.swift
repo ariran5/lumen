@@ -51,6 +51,19 @@ extension JSEngine {
         }
         tabsNS.setObject(open, forKeyedSubscript: "open" as NSString)
 
+        // navigate(url) — навигация СВОЕЙ табы (не открывает новую).
+        // Используется встроенным lumen://home для пинов / recent клика.
+        let navigate: @convention(block) (String) -> Void = { url in
+            MainActor.assumeIsolated {
+                guard let tab = TabsStore.shared.tabs.first(where: { $0.id.uuidString == ownIDString }) else {
+                    return
+                }
+                tab.addressInput = url
+                tab.commit()
+            }
+        }
+        tabsNS.setObject(navigate, forKeyedSubscript: "navigate" as NSString)
+
         let close: @convention(block) (String?) -> Void = { id in
             let target = (id?.isEmpty == false) ? id! : ownIDString
             MainActor.assumeIsolated {

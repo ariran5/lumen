@@ -7,16 +7,35 @@ enum TabMode: Equatable {
     case fastApp(URL)
 }
 
+/// Направление навигации — определяет анимацию slide-перехода в shell.
+enum NavDirection {
+    case forward   // push: вперёд (новая страница из правого края)
+    case back      // pop:  назад (текущая уезжает вправо)
+}
+
 @MainActor
 @Observable
 final class TabModel: Identifiable {
+    static let homeURL = URL(string: "lumen://home")!
+
     let id: UUID = UUID()
     var addressInput: String = ""
-    var mode: TabMode = .start
+    var mode: TabMode = .fastApp(homeURL)
     var isLoading: Bool = false
     var pageTitle: String = ""
     var canGoBack: Bool = false
     var canGoForward: Bool = false
+
+    /// Per-tab URL стек для outer navigation. `commit()` пушит сюда
+    /// предыдущий URL; `goBack()` поппит. Дом не пушим (он база).
+    private(set) var urlStack: [URL] = []
+
+    /// Флаг чтобы `goBack()` не пушил URL обратно в стек при reuse `commit()`.
+    private var isBackNavigating: Bool = false
+
+    /// Последнее направление перехода — читается TabContent'ом чтобы выбрать
+    /// asymmetric slide-transition (forward — справа влево, back — наоборот).
+    var lastNavDirection: NavDirection = .forward
 
     /// Short display title — fallback chain: pageTitle > host > "New Tab".
     var displayTitle: String {
@@ -41,6 +60,22 @@ final class TabModel: Identifiable {
         guard let url = Self.normalize(addressInput) else { return }
         addressInput = url.absoluteString
 
+        // Direction для slide-анимации. goBack() поднимает свой флаг и сам
+        // выставляет .back до вызова commit().
+        if !isBackNavigating {
+            lastNavDirection = .forward
+        }
+
+        // Push текущего URL в стек перед навигацией (если это не back-навигация
+        // и не дубликат). Дом не пушим — он база, к нему всегда возврат.
+        if !isBackNavigating,
+           let current = currentURL,
+           current != url,
+           current != Self.homeURL,
+           urlStack.last != current {
+            urlStack.append(current)
+        }
+
         // Внутренние lumen:// страницы (history, settings, ...) грузим как
         // fast-app сразу, без probe и без записи в историю.
         if url.scheme == "lumen" {
@@ -52,7 +87,7 @@ final class TabModel: Identifiable {
 
         let host = url.host ?? url.absoluteString
 
-        // Cache hit — мгновенное решение.
+        // Cache hit — мгновенное решение, без probe-round-trip'а.
         if let cached = BundleProbeCache.shared.get(host: host) {
             switch cached {
             case .fastApp: mode = .fastApp(url)
@@ -61,28 +96,67 @@ final class TabModel: Identifiable {
             return
         }
 
-        // Cache miss: оптимистично запускаем WebView (загрузка идёт параллельно),
-        // probe — в фоне с таймаутом. Если manifest найден до того как
-        // пользователь ушёл с этой страницы → swap на FastApp.
-        mode = .web(url)
+        // Cache miss: priority-probe. Держим старый mode (с прогресс-баром) до
+        // ответа probe или 800мс. Если probe сказал .fastApp — монтируем app
+        // напрямую, никакого JSON-flash через WebView. Иначе → .web (probe
+        // продолжается в фоне и может upgrade до .fastApp когда вернётся).
+        isLoading = true
+        let target = url
+
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(800))
+            guard let self else { return }
+            guard self.addressInput == target.absoluteString else { return }
+            if self.modeMatches(target) { return }
+            self.mode = .web(target)
+        }
 
         Task { [weak self] in
-            let detection = await BundleLoader.probe(url: url)
+            let result = await BundleLoader.probe(url: target)
+            BundleProbeCache.shared.set(host: host, result)
             await MainActor.run {
-                BundleProbeCache.shared.set(host: host, detection)
                 guard let self else { return }
-                // Применяем swap только если пользователь всё ещё на том же URL.
-                guard case .web(let currentURL) = self.mode, currentURL == url else { return }
-                if detection == .fastApp {
-                    self.mode = .fastApp(url)
+                guard self.addressInput == target.absoluteString else { return }
+                switch result {
+                case .fastApp:
+                    self.mode = .fastApp(target)
+                case .web:
+                    if !self.modeMatches(target) {
+                        self.mode = .web(target)
+                    }
                 }
+                self.isLoading = false
             }
         }
     }
 
+    /// true если текущий mode уже указывает на этот URL.
+    private func modeMatches(_ url: URL) -> Bool {
+        switch mode {
+        case .fastApp(let u), .web(let u): return u == url
+        case .start: return false
+        }
+    }
+
     func goHome() {
-        mode = .start
+        lastNavDirection = .back
+        mode = .fastApp(Self.homeURL)
         addressInput = ""
+        urlStack.removeAll()
+    }
+
+    /// Pop последнего URL из стека. Если стек пуст — go home. Используется
+    /// edge-swipe жестом для возврата с sub-fast-app'ов на главную.
+    func goBack() {
+        lastNavDirection = .back
+        guard let prev = urlStack.popLast() else {
+            goHome()
+            return
+        }
+        isBackNavigating = true
+        addressInput = prev.absoluteString
+        commit()
+        isBackNavigating = false
     }
 
     static func normalize(_ raw: String) -> URL? {

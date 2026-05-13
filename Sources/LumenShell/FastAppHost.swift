@@ -15,7 +15,11 @@ struct FastAppHost: UIViewControllerRepresentable {
         let rootPage = LumenPageViewController(title: nil)
         let nav = UINavigationController(rootViewController: rootPage)
         nav.navigationBar.prefersLargeTitles = false
-        nav.view.backgroundColor = UIColor(red: 0.06, green: 0.06, blue: 0.07, alpha: 1)
+        nav.view.backgroundColor = UIColor(red: 0.043, green: 0.043, blue: 0.059, alpha: 1)
+        // Скрываем nav bar — chrome теперь живёт в shell'е, fast-app не
+        // должен рисовать свою верхнюю плашку. Edge-swipe-to-pop при этом
+        // продолжает работать.
+        nav.setNavigationBarHidden(true, animated: false)
 
         rootPage.loadViewIfNeeded()
 
@@ -26,8 +30,6 @@ struct FastAppHost: UIViewControllerRepresentable {
         rootPage.onLayout = { [weak coord = context.coordinator] in
             coord?.loadIfNeeded()
         }
-
-        Self.styleNavBar(nav)
 
         return nav
     }
