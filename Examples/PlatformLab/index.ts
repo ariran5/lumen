@@ -18,7 +18,21 @@ const statusBarTheme = signal<'auto' | 'dark' | 'light'>('auto')
 const statusBarHidden = signal(false)
 const refreshCount = signal(0)
 const isRefreshing = signal(false)
+const notifStatus = signal<string>('—')
+const lastTapped = signal<string>('—')
+const incomingURL = signal<string>('—')
 let wsHandle: WebSocketHandle | null = null
+
+// Подписки на push-каналы native'а. Регистрируем один раз — handle'ы живут
+// до конца жизни фастаппа.
+lumen.notifications.onTap.subscribe((id) => {
+  lastTapped.value = id
+  lumen.haptics('success')
+})
+lumen.linking.onIncoming.subscribe((url) => {
+  incomingURL.value = url
+  lumen.haptics('light')
+})
 
 const COLORS = {
   bg: '#0B0B0F',
@@ -44,6 +58,8 @@ function App() {
       RefreshCard(),
       BiometricsCard(),
       StatusBarCard(),
+      NotificationsCard(),
+      DeepLinkCard(),
       AppStateCard(),
       ThemeCard(),
       NetworkCard(),
@@ -201,6 +217,68 @@ function StatusBarCard() {
       statusBarHidden.value = next
       lumen.statusBar.style({hidden: next})
     }),
+  )
+}
+
+// ── Заход C / Notifications ───────────────────────────────────────────
+//
+// requestPermission → schedule в 5s → tap-listener фиксирует id.
+
+function NotificationsCard() {
+  return Card('NOTIFICATIONS',
+    () => `${notifStatus.value} · last tap: ${lastTapped.value}`,
+    Text({fontSize: 11, color: COLORS.textMuted},
+         'Запроси permission, запланируй на 5 сек, лочь экран — придёт notification. Тап → id.'),
+    Row(
+      View({flex: 1},
+        PrimaryButton('Request permission', async () => {
+          const r = await lumen.notifications.requestPermission()
+          notifStatus.value = `permission: ${r}`
+        }),
+      ),
+      View({flex: 1},
+        SecondaryButton('Schedule +5s', async () => {
+          try {
+            const id = await lumen.notifications.schedule({
+              title: 'Lumen lab',
+              body: 'Tap me to fire onTap.',
+              at: Date.now() + 5000,
+            })
+            notifStatus.value = `scheduled: ${id.slice(0, 8)}…`
+          } catch (e) {
+            notifStatus.value = `schedule failed: ${String(e)}`
+          }
+        }),
+      ),
+    ),
+    SecondaryButton('Cancel all', () => {
+      lumen.notifications.cancelAll()
+      notifStatus.value = 'cleared all'
+    }),
+  )
+}
+
+// ── Заход C / Deep links ──────────────────────────────────────────────
+//
+// Регистрируем `lumen://` в Info.plist; в Safari вбей lumen://hello —
+// SwiftUI .onOpenURL ловит и пушит через NativeNotifier на JS-канал.
+
+function DeepLinkCard() {
+  return Card('DEEP LINK',
+    () => `last: ${incomingURL.value}`,
+    Text({fontSize: 11, color: COLORS.textMuted},
+         'Открой в Safari: lumen://hello — вернёшься сюда, URL появится.'),
+    Row(
+      View({flex: 1},
+        PrimaryButton('Self-fire lumen://demo', () => {
+          const ok = lumen.linking.open('lumen://demo?from=lab')
+          if (!ok) incomingURL.value = 'cannot open'
+        }),
+      ),
+      View({flex: 1},
+        SecondaryButton('Clear', () => { incomingURL.value = '—' }),
+      ),
+    ),
   )
 }
 

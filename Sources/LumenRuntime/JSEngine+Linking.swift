@@ -8,6 +8,11 @@ import UIKit
 /// `canOpen` для non-http схем требует `LSApplicationQueriesSchemes` в
 /// Info.plist (mailto/tel/sms/instagram/...). `open` работает без декларации,
 /// просто всегда возвращает success/false по результату.
+///
+/// `_consumePending` — drain очереди incoming URL'ов (SwiftUI `.onOpenURL` →
+/// `IncomingURLStore.enqueue`). JS-обёртка `linking.onIncoming.subscribe(fn)`
+/// в CoreFramework подписывается на канал `linking.incoming` и при каждом
+/// fire вычитывает накопившиеся URL'ы.
 extension JSEngine {
     func installLinkingBridge() {
         guard let lumen = context.objectForKeyedSubscript("lumen") else { return }
@@ -29,8 +34,15 @@ extension JSEngine {
             }
         }
 
+        let consumePending: @convention(block) () -> [String] = {
+            MainActor.assumeIsolated {
+                IncomingURLStore.shared.consume()
+            }
+        }
+
         linking.setObject(open, forKeyedSubscript: "open" as NSString)
         linking.setObject(canOpen, forKeyedSubscript: "canOpen" as NSString)
+        linking.setObject(consumePending, forKeyedSubscript: "_consumePending" as NSString)
         lumen.setObject(linking, forKeyedSubscript: "linking" as NSString)
     }
 }

@@ -54,10 +54,10 @@
 | 5 | `lumen.biometrics.available() → 'faceID'\|'touchID'\|'none'` | LAContext.canEvaluatePolicy | trivial | ✓ done |
 | 6 | Pull-to-refresh на ScrollView (`onRefresh: () => Promise`) | UIRefreshControl + thenable-await на LumenScrollView | medium | ✓ done |
 | 7 | `lumen.statusBar.style({theme, hidden})` | preferredStatusBarStyle override через UIViewController | small | ✓ done |
-| 8 | `lumen.notifications.schedule({title, body, at}) → id` (local only) | UNUserNotificationCenter — request, add | medium | — |
-| 9 | `lumen.notifications.requestPermission() → Promise<'granted'\|'denied'>` | UNUserNotificationCenter.requestAuthorization | small | — |
-| 10 | `lumen.notifications.onTap.subscribe(fn)` | UNUserNotificationCenterDelegate didReceive | medium | — |
-| 11 | Deep links — incoming URL → `lumen.linking.onIncoming.subscribe(fn)` | scene/app delegate openURLContexts → NativeNotifier | medium | — |
+| 8 | `lumen.notifications.schedule({title, body, at}) → id` (local only) | UNUserNotificationCenter — request, add | medium | ✓ done |
+| 9 | `lumen.notifications.requestPermission() → Promise<'granted'\|'denied'>` | UNUserNotificationCenter.requestAuthorization | small | ✓ done |
+| 10 | `lumen.notifications.onTap.subscribe(fn)` | UNUserNotificationCenterDelegate didReceive | medium | ✓ done |
+| 11 | Deep links — incoming URL → `lumen.linking.onIncoming.subscribe(fn)` | SwiftUI `.onOpenURL` → IncomingURLStore → NativeNotifier | medium | ✓ done |
 
 ## Группировка по подзаходам
 
@@ -65,7 +65,7 @@
 
 **Заход B — biometrics + pull-to-refresh + status bar (4-7):** UX-апгрейд для типичных app'ов. Не блокеры друг друга, но размер сопоставимый. ~250 LOC. ✓ **закрыт (2026-05-13, session 012)** — JSEngine+{Biometrics,StatusBar}.swift + onRefresh/refreshing на LumenScrollView через UIRefreshControl. NSFaceIDUsageDescription добавлен в Info.plist. PlatformLab карточки Biometrics / Pull-to-refresh / StatusBar работают. См. [sessions/012-2026-05-13-tier2-zahod-b-biometrics-refresh-statusbar.md](../sessions/012-2026-05-13-tier2-zahod-b-biometrics-refresh-statusbar.md).
 
-**Заход C — local notifications + deep links (8-11):** Отдельный коммит — нужно дёрнуть AppDelegate/SceneDelegate, плюс UN-permission диалог. APNS (remote push) **отложен до Tier 2.5** — требует capabilities + entitlements + dev-сертификат, отдельная инфра-возня.
+**Заход C — local notifications + deep links (8-11):** ✓ **закрыт (2026-05-14, session 013)** — JSEngine+Notifications.swift (singleton UNUserNotificationCenterDelegate; `_consumeTaps` drain в JS), IncomingURLStore + SwiftUI `.onOpenURL` (без AppDelegate/SceneDelegate); `lumen://` URL scheme в Info.plist; CoreFramework JS-обёртки `notifications.{requestPermission,schedule}` Promise + `onTap.subscribe` / `linking.onIncoming.subscribe` через generic notify-каналы. APNS (remote push) и Universal Links (https://) **отложены до Tier 2.5** — требуют entitlements / certs / associated-domains, отдельная Apple-side инфра. См. [sessions/013-2026-05-14-tier2-zahod-c-notifications-deep-links.md](../sessions/013-2026-05-14-tier2-zahod-c-notifications-deep-links.md).
 
 ## Acceptance
 
@@ -77,6 +77,17 @@
 ## Рекомендуемая последовательность
 
 A → B → C. После A появляется реактивный системный context, который дальше использует всё остальное (например biometrics диалог проверяет theme, и т.п.). C последним потому что инфра-зависимостей больше (entitlements/delegates).
+
+---
+
+# Tier 2.5 — Apple-side infra (backlog)
+
+Фичи, которые блокируются capability/entitlement/сертификат-возня на стороне Apple. Код в самом app'е дешёвый — основной cost ops/devops.
+
+| API | Что нужно | Когда делать |
+|---|---|---|
+| **APNS (remote push)** | `aps-environment` entitlement, APNS .p8 на сервере, `UIApplicationDelegate.didRegister...DeviceToken`, JS API `lumen.notifications.deviceToken()` / `onDeviceTokenChange.subscribe(fn)`, background fetch | Когда конкретный fast-app нуждается в server push'ах |
+| **Universal Links (https://)** | `applinks:domain` entitlement, `apple-app-site-association` JSON на target домене, тот же `linking.onIncoming.subscribe` ловит UL | Когда нужен seamless web→app переход (например shared link открывается в native app'е) |
 
 ---
 

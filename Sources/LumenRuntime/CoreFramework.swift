@@ -591,6 +591,69 @@ enum CoreFramework {
         }
       }
 
+      // ─────────── notifications ───────────
+      // Native bridge даёт _nativeRequestPermission/_nativeSchedule (Promise-
+      // friendly resolve+reject), cancel/cancelAll, _consumeTaps. Здесь
+      // оборачиваем в человеческий API: requestPermission() и schedule()
+      // возвращают Promise; onTap.subscribe(fn) подписывается на канал
+      // 'notifications.tap' и при срабатывании drain'ит pending tap ids.
+      if (lumen.notifications) {
+        const native = lumen.notifications
+        const cancel = native.cancel
+        const cancelAll = native.cancelAll
+        lumen.notifications = {
+          requestPermission: function () {
+            return new Promise(function (resolve) {
+              native._nativeRequestPermission(resolve, function () {})
+            })
+          },
+          schedule: function (config) {
+            return new Promise(function (resolve, reject) {
+              native._nativeSchedule(config || {}, resolve, reject)
+            })
+          },
+          cancel: function (id) { cancel(id == null ? null : String(id)) },
+          cancelAll: function () { cancelAll() },
+          onTap: {
+            // Cold-launch кейс: юзер тапнул нотификацию пока app убит,
+            // delegate сохраняет id, JS позже подписывается — drain() при
+            // subscribe вычитывает накопившееся.
+            subscribe: function (fn) {
+              if (!lumen._notify) return function () {}
+              function drain() {
+                const ids = native._consumeTaps()
+                if (!ids || ids.length === 0) return
+                for (let i = 0; i < ids.length; i++) fn(ids[i])
+              }
+              drain()
+              const id = lumen._notify._subscribe('notifications.tap', drain)
+              return function () { lumen._notify._unsubscribe('notifications.tap', id) }
+            },
+          },
+        }
+      }
+
+      // ─────────── linking.onIncoming ───────────
+      // Deep-link URLs (lumen://...) приходят через SwiftUI .onOpenURL →
+      // IncomingURLStore. subscribe(fn) подписывается на канал
+      // 'linking.incoming' и при fire drain'ит pending URL'ы.
+      if (lumen.linking && lumen.linking._consumePending) {
+        const consume = lumen.linking._consumePending
+        lumen.linking.onIncoming = {
+          subscribe: function (fn) {
+            if (!lumen._notify) return function () {}
+            function drain() {
+              const urls = consume()
+              if (!urls || urls.length === 0) return
+              for (let i = 0; i < urls.length; i++) fn(urls[i])
+            }
+            drain()
+            const id = lumen._notify._subscribe('linking.incoming', drain)
+            return function () { lumen._notify._unsubscribe('linking.incoming', id) }
+          },
+        }
+      }
+
       // ─────────── bindings → fine-grained effects ───────────
       // После lumen.render(tree) проходим по дереву и для каждого binding'а
       // (реактивного prop'а) создаём per-prop effect. Effect живёт в scope'е

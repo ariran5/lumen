@@ -50,6 +50,7 @@ extension JSEngine {
         installNetworkBridge()
         installBiometricsBridge()
         installStatusBarBridge()
+        installNotificationsBridge()
         installPatchBridge()
         installNotifyBridge()
         installHistoryBridge()

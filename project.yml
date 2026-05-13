@@ -32,6 +32,10 @@ targets:
         LSRequiresIPhoneOS: true
         NSFaceIDUsageDescription: "Lumen использует Face ID для авторизации в фастаппах."
         UILaunchScreen: {}
+        CFBundleURLTypes:
+          - CFBundleURLName: com.lumen.browser
+            CFBundleURLSchemes:
+              - lumen
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UISupportedInterfaceOrientations:
