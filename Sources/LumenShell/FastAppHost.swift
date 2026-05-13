@@ -74,7 +74,12 @@ struct FastAppHost: UIViewControllerRepresentable {
         /// Вызывается изначально и при hot-reload.
         func setupEngine() {
             guard let rootPage, let nav, let rootRenderer = rootPage.renderer else { return }
-            let engine = JSEngine()
+            // Origin = scheme+host+port URL'а app'а. Bridges получают
+            // namespace для storage/Keychain/FS из этого Origin. Если URL
+            // без host (теоретически невозможно после normalize) — fallback
+            // на system, чтобы не падать.
+            let origin = Origin(url: url) ?? .system
+            let engine = JSEngine(origin: origin)
             engine.onLog = { [weak self] level, msg in
                 print("[js \(level.rawValue)] \(msg)")
                 self?.jsLogger.info("\(level.rawValue, privacy: .public): \(msg, privacy: .public)")

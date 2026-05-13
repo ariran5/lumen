@@ -6,7 +6,10 @@ extension JSEngine {
         guard let lumen = context.objectForKeyedSubscript("lumen") else { return }
         let storage = JSValue(newObjectIn: context)!
 
-        let prefix = "lumen.storage."
+        // Per-origin namespace. Две табы acme.com шарят keys через единый
+        // OriginContext; evil.com физически не видит наши ключи — у него
+        // свой prefix с другим origin-хешом.
+        let prefix = originContext.storagePrefix
 
         let get: @convention(block) (String?) -> String? = { key in
             guard let key, !key.isEmpty else { return nil }

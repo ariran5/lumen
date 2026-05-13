@@ -7,9 +7,26 @@ struct LumenManifest: Decodable, Sendable {
     let minRuntime: String?
     let dev: Bool?
 
+    /// Список persistent-капабилити которые app хочет запросить.
+    /// Юзер всё равно одобряет каждую через runtime-prompt; манифест
+    /// это лишь декларация, не грант. Известные значения: "notifications",
+    /// "biometric", "camera", "mic", "photos", "location", "contacts".
+    let permissions: [String]?
+
+    /// Hosts/wildcards с которыми app может общаться по fetch/WebSocket.
+    /// Дополняет implicit-allow собственного host + поддоменов + любых
+    /// портов. Wildcard `"*"` = allow-all (с варнингом в шелле).
+    /// Пример: `["api.partner.com", "*.cdn.io"]`.
+    let connect: [String]?
+
+    /// Override storage-квоты (default 100MB). Если больше дефолта —
+    /// потребуется отдельный permission-prompt. Принимает "200MB", "1GB".
+    let storageQuota: String?
+
     enum CodingKeys: String, CodingKey {
-        case name, version, entry, dev
+        case name, version, entry, dev, permissions, connect
         case minRuntime = "min_runtime"
+        case storageQuota = "storage_quota"
     }
 }
 
@@ -145,7 +162,10 @@ enum BundleLoader {
             version: "0",
             entry: "inline",
             minRuntime: nil,
-            dev: false
+            dev: false,
+            permissions: nil,
+            connect: nil,
+            storageQuota: nil
         )
         return LumenBundle(manifest: manifest, script: script, origin: url)
     }

@@ -5,6 +5,14 @@ import JavaScriptCore
 final class JSEngine {
     let context: JSContext
 
+    /// Origin контекст этого engine'а — основа sandbox-изоляции.
+    /// Storage/Keychain/FS bridges берут отсюда namespace. Дедуплицируется
+    /// между табами одного сайта через `OriginContextRegistry`, поэтому
+    /// permission/storage решения видны во всех табах того же origin.
+    let originContext: OriginContext
+
+    var origin: Origin { originContext.origin }
+
     enum LogLevel: String, Sendable {
         case log, info, warn, error
     }
@@ -25,12 +33,13 @@ final class JSEngine {
     var notifyListeners: [String: [(Int, JSManagedValue)]] = [:]
     private var nextListenerID: Int = 0
 
-    init() {
+    init(origin: Origin) {
         guard let ctx = JSContext() else {
             fatalError("Failed to create JSContext")
         }
         self.context = ctx
-        ctx.name = "Lumen"
+        self.originContext = OriginContextRegistry.shared.context(for: origin)
+        ctx.name = "Lumen[\(origin)]"
 
         installExceptionHandler()
         installConsole()

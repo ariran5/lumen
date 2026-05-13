@@ -10,7 +10,9 @@ extension JSEngine {
     func installSecureStorageBridge() {
         guard let lumen = context.objectForKeyedSubscript("lumen") else { return }
         let secureStorage = JSValue(newObjectIn: context)!
-        let service = "com.lumen.secureStorage"
+        // Keychain service per origin. SecItemDelete по service'у = wipe
+        // всех secure-entries одного app'а одним вызовом (для clear-site-data).
+        let service = originContext.keychainService
 
         let get: @convention(block) (String?) -> String? = { key in
             guard let key, !key.isEmpty else { return nil }
