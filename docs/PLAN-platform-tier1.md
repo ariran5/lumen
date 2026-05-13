@@ -45,25 +45,25 @@
 
 ## Скоп
 
-| # | API | Реализация | Сложность |
-|---|---|---|---|
-| 1 | `lumen.appState` reactive (`'active'\|'background'\|'inactive'`) | UIApplication.willResignActive/didBecomeActive → NativeNotifier → signal | small |
-| 2 | `lumen.appearance.theme` reactive (`'dark'\|'light'`) | UITraitCollection.userInterfaceStyle observer | small |
-| 3 | `lumen.network.{online, type}` reactive | NWPathMonitor → NativeNotifier | small |
-| 4 | `lumen.biometrics.authenticate(reason) → Promise<bool>` | LAContext.evaluatePolicy | small |
-| 5 | `lumen.biometrics.available() → 'faceID'\|'touchID'\|'none'` | LAContext.canEvaluatePolicy | trivial |
-| 6 | Pull-to-refresh на ScrollView (`onRefresh`, `refreshing` props) | UIRefreshControl на LumenScrollView | medium |
-| 7 | `lumen.statusBar.style({theme, hidden})` | preferredStatusBarStyle override через UIViewController | small |
-| 8 | `lumen.notifications.schedule({title, body, at}) → id` (local only) | UNUserNotificationCenter — request, add | medium |
-| 9 | `lumen.notifications.requestPermission() → Promise<'granted'\|'denied'>` | UNUserNotificationCenter.requestAuthorization | small |
-| 10 | `lumen.notifications.onTap.subscribe(fn)` | UNUserNotificationCenterDelegate didReceive | medium |
-| 11 | Deep links — incoming URL → `lumen.linking.onIncoming.subscribe(fn)` | scene/app delegate openURLContexts → NativeNotifier | medium |
+| # | API | Реализация | Сложность | Статус |
+|---|---|---|---|---|
+| 1 | `lumen.appState` reactive (`'active'\|'background'\|'inactive'`) | UIApplication notifications → signal | small | ✓ done |
+| 2 | `lumen.appearance.theme` reactive (`'dark'\|'light'`) | UIWindowScene.registerForTraitChanges (iOS 17+) | small | ✓ done |
+| 3 | `lumen.network.{online, type}` reactive | NWPathMonitor → signal | small | ✓ done |
+| 4 | `lumen.biometrics.authenticate(reason) → Promise<bool>` | LAContext.evaluatePolicy | small | ✓ done |
+| 5 | `lumen.biometrics.available() → 'faceID'\|'touchID'\|'none'` | LAContext.canEvaluatePolicy | trivial | ✓ done |
+| 6 | Pull-to-refresh на ScrollView (`onRefresh: () => Promise`) | UIRefreshControl + thenable-await на LumenScrollView | medium | ✓ done |
+| 7 | `lumen.statusBar.style({theme, hidden})` | preferredStatusBarStyle override через UIViewController | small | ✓ done |
+| 8 | `lumen.notifications.schedule({title, body, at}) → id` (local only) | UNUserNotificationCenter — request, add | medium | — |
+| 9 | `lumen.notifications.requestPermission() → Promise<'granted'\|'denied'>` | UNUserNotificationCenter.requestAuthorization | small | — |
+| 10 | `lumen.notifications.onTap.subscribe(fn)` | UNUserNotificationCenterDelegate didReceive | medium | — |
+| 11 | Deep links — incoming URL → `lumen.linking.onIncoming.subscribe(fn)` | scene/app delegate openURLContexts → NativeNotifier | medium | — |
 
 ## Группировка по подзаходам
 
-**Заход A — reactive signals (1-3):** lifecycle + theme + network. Все три читаются как signal'ы, инфра `NativeNotifier` готова, делается одним коммитом. ~150 LOC, ~3 файла. ✓ **закрыт (2026-05-13)** — JSEngine+{Lifecycle,Appearance,Network}.swift; signal-backed getters в CoreFramework; PlatformLab карточки AppState/Theme/Network реактивно обновляются.
+**Заход A — reactive signals (1-3):** lifecycle + theme + network. Все три читаются как signal'ы, инфра `NativeNotifier` готова, делается одним коммитом. ~150 LOC, ~3 файла. ✓ **закрыт (2026-05-13, session 011)** — JSEngine+{Lifecycle,Appearance,Network}.swift; signal-backed getters в CoreFramework (по образцу `safeArea`, не через subscribe-канал — скаляры читаются как `lumen.appState` без явного subscribe); PlatformLab карточки AppState/Theme/Network реактивно обновляются на устройстве. См. [sessions/011-2026-05-13-tier2-zahod-a-reactive-signals.md](../sessions/011-2026-05-13-tier2-zahod-a-reactive-signals.md).
 
-**Заход B — biometrics + pull-to-refresh + status bar (4-7):** UX-апгрейд для типичных app'ов. Не блокеры друг друга, но размер сопоставимый. ~250 LOC.
+**Заход B — biometrics + pull-to-refresh + status bar (4-7):** UX-апгрейд для типичных app'ов. Не блокеры друг друга, но размер сопоставимый. ~250 LOC. ✓ **закрыт (2026-05-13, session 012)** — JSEngine+{Biometrics,StatusBar}.swift + onRefresh/refreshing на LumenScrollView через UIRefreshControl. NSFaceIDUsageDescription добавлен в Info.plist. PlatformLab карточки Biometrics / Pull-to-refresh / StatusBar работают. См. [sessions/012-2026-05-13-tier2-zahod-b-biometrics-refresh-statusbar.md](../sessions/012-2026-05-13-tier2-zahod-b-biometrics-refresh-statusbar.md).
 
 **Заход C — local notifications + deep links (8-11):** Отдельный коммит — нужно дёрнуть AppDelegate/SceneDelegate, плюс UN-permission диалог. APNS (remote push) **отложен до Tier 2.5** — требует capabilities + entitlements + dev-сертификат, отдельная инфра-возня.
 

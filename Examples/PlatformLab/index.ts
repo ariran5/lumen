@@ -13,6 +13,11 @@ const wsConnected = signal(false)
 const linkingResult = signal<string>('—')
 const shareResult = signal<string>('—')
 const actionResult = signal<string>('—')
+const bioResult = signal<string>('—')
+const statusBarTheme = signal<'auto' | 'dark' | 'light'>('auto')
+const statusBarHidden = signal(false)
+const refreshCount = signal(0)
+const isRefreshing = signal(false)
 let wsHandle: WebSocketHandle | null = null
 
 const COLORS = {
@@ -32,7 +37,13 @@ const COLORS = {
 function App() {
   return View({flex: 1, backgroundColor: COLORS.bg, paddingTop: lumen.safeArea.top},
     Header(),
-    ScrollView({flex: 1, padding: 14, gap: 12},
+    ScrollView({
+      flex: 1, padding: 14, gap: 12,
+      onRefresh: handleRefresh,
+    },
+      RefreshCard(),
+      BiometricsCard(),
+      StatusBarCard(),
       AppStateCard(),
       ThemeCard(),
       NetworkCard(),
@@ -96,7 +107,7 @@ function PrimaryButton(label: string | Thunk<string>, onTap: () => void, color: 
   )
 }
 
-function SecondaryButton(label: string, onTap: () => void) {
+function SecondaryButton(label: string | Thunk<string>, onTap: () => void) {
   return Pressable({
     backgroundColor: COLORS.surfaceHi,
     borderColor: COLORS.border, borderWidth: 1,
@@ -105,12 +116,92 @@ function SecondaryButton(label: string, onTap: () => void) {
     alignItems: 'center',
     onTap,
   },
-    Text({fontSize: 13, fontWeight: '500', color: COLORS.text}, label),
+    Text({fontSize: 13, fontWeight: '500', color: COLORS.text}, label as Thunk<string>),
   )
 }
 
 function Row(...children: Child[]) {
   return View({flexDirection: 'row', gap: 8}, ...children)
+}
+
+// ── Заход B / Pull-to-refresh ─────────────────────────────────────────
+//
+// onRefresh приходит когда юзер дёрнул scroll вниз; нативный спиннер
+// показывается пока `refreshing` true. Имитируем fetch — 1.5s setTimeout.
+
+function handleRefresh(): Promise<void> {
+  isRefreshing.value = true
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      refreshCount.value = refreshCount.value + 1
+      isRefreshing.value = false
+      resolve()
+    }, 1500)
+  })
+}
+
+function RefreshCard() {
+  return Card('PULL-TO-REFRESH',
+    () => `refreshed ${refreshCount.value}× · ${isRefreshing.value ? 'fetching…' : 'idle'}`,
+    Text({fontSize: 11, color: COLORS.textMuted},
+         'Потяни scroll вниз — спиннер живёт пока Promise не resolve\'нется.'),
+  )
+}
+
+// ── Заход B / Biometrics ──────────────────────────────────────────────
+
+function BiometricsCard() {
+  return Card('BIOMETRICS',
+    () => bioResult.value,
+    Text({fontSize: 11, color: COLORS.textMuted},
+         () => `available: ${lumen.biometrics.available()}`),
+    Row(
+      View({flex: 1},
+        PrimaryButton('Authenticate', async () => {
+          bioResult.value = 'prompting…'
+          const ok = await lumen.biometrics.authenticate('Unlock platform lab')
+          bioResult.value = ok ? 'authenticated ✓' : 'denied / cancelled'
+          if (ok) lumen.haptics('success')
+        }),
+      ),
+      View({flex: 1},
+        SecondaryButton('Reset', () => { bioResult.value = '—' }),
+      ),
+    ),
+  )
+}
+
+// ── Заход B / StatusBar ───────────────────────────────────────────────
+
+function StatusBarCard() {
+  return Card('STATUS BAR',
+    () => `theme: ${statusBarTheme.value} · hidden: ${statusBarHidden.value}`,
+    Row(
+      View({flex: 1},
+        SecondaryButton('auto', () => {
+          statusBarTheme.value = 'auto'
+          lumen.statusBar.style({theme: 'auto'})
+        }),
+      ),
+      View({flex: 1},
+        SecondaryButton('dark', () => {
+          statusBarTheme.value = 'dark'
+          lumen.statusBar.style({theme: 'dark'})
+        }),
+      ),
+      View({flex: 1},
+        SecondaryButton('light', () => {
+          statusBarTheme.value = 'light'
+          lumen.statusBar.style({theme: 'light'})
+        }),
+      ),
+    ),
+    SecondaryButton(() => statusBarHidden.value ? 'Show bar' : 'Hide bar', () => {
+      const next = !statusBarHidden.value
+      statusBarHidden.value = next
+      lumen.statusBar.style({hidden: next})
+    }),
+  )
 }
 
 // ── 0a. AppState (Tier 2 — reactive lifecycle) ────────────────────────

@@ -30,6 +30,7 @@ targets:
         CFBundleShortVersionString: "0.0.1"
         CFBundleVersion: "1"
         LSRequiresIPhoneOS: true
+        NSFaceIDUsageDescription: "Lumen использует Face ID для авторизации в фастаппах."
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false

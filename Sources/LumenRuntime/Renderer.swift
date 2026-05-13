@@ -316,6 +316,7 @@ final class Renderer {
         let frame = flex.frame
         let sv = LumenScrollView(frame: frame)
         sv.onScrollHandler = node.onScroll
+        sv.configureRefresh(onRefresh: node.onRefresh)
         host.addSubview(sv)
         sv.renderContent(children: node.children, wrapperStyle: node.style)
         mount.scrollView = sv
@@ -593,6 +594,7 @@ final class Renderer {
         if let sv = mount.scrollView {
             if sv.frame != frame { sv.frame = frame }
             sv.onScrollHandler = node.onScroll
+            sv.configureRefresh(onRefresh: node.onRefresh)
             sv.renderContent(children: node.children, wrapperStyle: node.style)
         } else {
             mountScroll(mount: mount, node: node, flex: flex)

@@ -48,6 +48,8 @@ extension JSEngine {
         installLifecycleBridge()
         installAppearanceBridge()
         installNetworkBridge()
+        installBiometricsBridge()
+        installStatusBarBridge()
         installPatchBridge()
         installNotifyBridge()
         installHistoryBridge()

@@ -14,6 +14,8 @@ final class LumenScrollView: UIScrollView, UIScrollViewDelegate {
     let contentView: UIView
     let renderer: Renderer
     var onScrollHandler: JSValue?
+    var onRefreshHandler: JSValue?
+    private var refreshTarget: RefreshTarget?
 
     private var lastRenderedChildren: [RenderNode] = []
     private var lastWrapperStyle: ViewStyle = ViewStyle()
@@ -36,6 +38,60 @@ final class LumenScrollView: UIScrollView, UIScrollViewDelegate {
         // тут пересчитаем contentSize.
         self.renderer.onAfterLayout = { [weak self] in
             self?.resyncContentSize()
+        }
+    }
+
+    /// Включает UIRefreshControl при появлении `onRefresh`, выключает при
+    /// `onRefresh == nil`. Контроль над спиннером — через возвращаемый из
+    /// JS Promise: после resolve/reject native сам зовёт `endRefreshing()`.
+    /// Sync-handler без Promise — конец спиннера сразу после возврата.
+    func configureRefresh(onRefresh: JSValue?) {
+        onRefreshHandler = onRefresh
+
+        if onRefresh == nil {
+            if let rc = refreshControl {
+                rc.removeTarget(refreshTarget, action: nil, for: .valueChanged)
+                rc.endRefreshing()
+                refreshControl = nil
+                refreshTarget = nil
+            }
+            return
+        }
+
+        if refreshControl == nil {
+            let rc = UIRefreshControl()
+            let target = RefreshTarget { [weak self] in
+                self?.fireRefresh()
+            }
+            rc.addTarget(target, action: #selector(RefreshTarget.fire), for: .valueChanged)
+            refreshTarget = target
+            refreshControl = rc
+        }
+    }
+
+    private func fireRefresh() {
+        guard let handler = onRefreshHandler else { return }
+        let result = handler.call(withArguments: [])
+
+        // Если JS вернул thenable — ждём resolve/reject. Иначе — sync, end сразу.
+        if let result, result.isObject,
+           let thenProp = result.objectForKeyedSubscript("then"),
+           thenProp.isObject,
+           let context = result.context {
+            let endBlock: @convention(block) (JSValue?) -> Void = { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.refreshControl?.endRefreshing()
+                }
+            }
+            // .then(end, end) — заканчиваем спиннер и на resolve, и на reject.
+            if let endValue = JSValue(object: endBlock, in: context) {
+                result.invokeMethod("then", withArguments: [endValue, endValue])
+                return
+            }
+        }
+        // Sync path: дать UIKit нарисовать спиннер до того как мы его закроем.
+        DispatchQueue.main.async { [weak self] in
+            self?.refreshControl?.endRefreshing()
         }
     }
 
@@ -116,4 +172,16 @@ final class LumenScrollView: UIScrollView, UIScrollViewDelegate {
             contentSize = newSize
         }
     }
+}
+
+/// UIRefreshControl ждёт `@objc` target. JSValue не может быть таким, поэтому
+/// заворачиваем в NSObject-обёртку, которая держит Swift-замыкание.
+@MainActor
+private final class RefreshTarget: NSObject {
+    let action: () -> Void
+    init(action: @escaping () -> Void) {
+        self.action = action
+        super.init()
+    }
+    @objc func fire() { action() }
 }

@@ -58,6 +58,7 @@
 | P6.3 | `lumen._patchProp(id, key, value)` + JS-side `registerBindings(tree)` per-prop effects | ScrollLab: 150 r/s → ~2 r/s (Vapor-style win) ✓ |
 | **P8 — Platform Tier 1** | clipboard / linking / share / actionSheet / secureStorage / imagePicker / ws | 7 bridges; PlatformLab demo; tsc clean ✓ |
 | **P9.A — Tier 2 / reactive signals** | `lumen.appState`, `lumen.appearance.theme`, `lumen.network.{online,type}` (signal-backed getters, push from native) | PlatformLab AppState/Theme/Network карточки реактивно обновляются ✓ |
+| **P9.B — Tier 2 / biometrics + pull-to-refresh + status bar** | `lumen.biometrics.{authenticate,available}` (LAContext), `onRefresh: () => Promise` на ScrollView (UIRefreshControl + thenable-await), `lumen.statusBar.style({theme,hidden})` | PlatformLab Biometrics / Pull-to-refresh / StatusBar карточки работают на устройстве ✓ |
 
 ### Архитектурные решения, зафиксированные по дороге
 

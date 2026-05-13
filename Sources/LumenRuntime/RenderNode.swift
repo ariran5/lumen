@@ -50,6 +50,7 @@ struct RenderNode {
 
     // scroll-specific
     var onScroll: JSValue?
+    var onRefresh: JSValue?
 
     // map-specific
     var mapRegion: MapRegionSpec?
@@ -162,6 +163,9 @@ extension RenderNode {
         if node.kind == .scroll {
             if let v = subscript_(value, "onScroll"), v.isObject {
                 node.onScroll = v
+            }
+            if let v = subscript_(value, "onRefresh"), v.isObject {
+                node.onRefresh = v
             }
         }
 

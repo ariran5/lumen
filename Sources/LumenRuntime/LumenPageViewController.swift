@@ -79,4 +79,12 @@ final class LumenPageViewController: UIViewController {
             onPopValue?.call(withArguments: [])
         }
     }
+
+    override var preferredStatusBarStyle: UIStatusBarStyle {
+        StatusBarConfig.current.style
+    }
+
+    override var prefersStatusBarHidden: Bool {
+        StatusBarConfig.current.hidden
+    }
 }

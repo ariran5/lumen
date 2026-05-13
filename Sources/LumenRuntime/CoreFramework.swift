@@ -132,7 +132,7 @@ enum CoreFramework {
         autocapitalize: 1, autocorrect: 1, secure: 1,
         onChange: 1, onSubmit: 1, onFocus: 1, onBlur: 1,
         intensity: 1, variant: 1,
-        onScroll: 1,
+        onScroll: 1, onRefresh: 1,
         // map-specific
         region: 1, pins: 1, mapType: 1,
         onRegionChange: 1, onPinTap: 1,
@@ -352,6 +352,7 @@ enum CoreFramework {
         }
         if (sb.bindings) node.bindings = sb.bindings
         if (typeof p.onScroll === 'function') node.onScroll = p.onScroll
+        if (typeof p.onRefresh === 'function') node.onRefresh = p.onRefresh
         if (p.key !== undefined) node.key = String(p.key)
         return node
       }
