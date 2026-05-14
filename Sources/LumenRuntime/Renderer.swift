@@ -224,10 +224,36 @@ final class Renderer {
 
         CATransaction.commit()
 
+        // Z-order fix для UIView-носителей (ScrollView/Blur/VirtualList/Map/
+        // TextInput). Они все живут как плоские sublayers `hostView` (не
+        // вложены в layer-tree родительского View), а `addSubview` всегда
+        // ставит view на верх. Если сначала смонтирован TabBar.Glass, а
+        // потом другой страницей — ScrollView, то ScrollView перекрывает
+        // TabBar и tap'ы по нему не доходят.
+        // Walk'аем дерево DFS и приводим subview-order к древесному.
+        if let host = hostView, let root = mountedRoot {
+            reorderEmbeddedViews(in: host, mount: root)
+        }
+
         lastRenderMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
         RenderMetrics.shared.record(lastRenderMs)
 
         flushDisposalBuffer()
+    }
+
+    /// Pre-order DFS: каждый встреченный UIView-носитель ставится на верх
+    /// `host.subviews` через `bringSubviewToFront`. После прохода последний
+    /// (deepest-rightmost) узел оказывается на самом верху — совпадает с
+    /// порядком детей в RenderNode tree.
+    private func reorderEmbeddedViews(in host: UIView, mount: MountedNode) {
+        if let v = mount.scrollView      { host.bringSubviewToFront(v) }
+        if let v = mount.blurView        { host.bringSubviewToFront(v) }
+        if let v = mount.virtualListView { host.bringSubviewToFront(v) }
+        if let v = mount.mapView         { host.bringSubviewToFront(v) }
+        if let v = mount.textInputView   { host.bringSubviewToFront(v) }
+        for child in mount.children {
+            reorderEmbeddedViews(in: host, mount: child)
+        }
     }
 
     // MARK: - Flex tree

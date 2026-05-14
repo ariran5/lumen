@@ -17,9 +17,13 @@ struct FastAppHost: UIViewControllerRepresentable {
         nav.navigationBar.prefersLargeTitles = false
         nav.view.backgroundColor = UIColor(red: 0.043, green: 0.043, blue: 0.059, alpha: 1)
         // Скрываем nav bar — chrome теперь живёт в shell'е, fast-app не
-        // должен рисовать свою верхнюю плашку. Edge-swipe-to-pop при этом
-        // продолжает работать.
+        // должен рисовать свою верхнюю плашку.
         nav.setNavigationBarHidden(true, animated: false)
+        // UIKit gotcha: при hidden nav-bar interactivePopGestureRecognizer
+        // по дефолту перестаёт распознаваться. Сбрасываем его delegate в
+        // nil, чтобы edge-swipe-to-pop работал на любых страницах глубже
+        // root'а. На root (стек == 1) UIKit сам игнорирует жест.
+        nav.interactivePopGestureRecognizer?.delegate = nil
 
         rootPage.loadViewIfNeeded()
 

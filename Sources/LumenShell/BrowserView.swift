@@ -24,10 +24,28 @@ public struct BrowserView: View {
 
     private var canSwipeBack: Bool {
         guard let tab = tabs.activeTab else { return false }
-        return tab.currentURL != TabModel.homeURL
+        // Outer edge-swipe работает только если в табе есть URL-стек куда
+        // возвращаться (несколько fast-app'ов или web-страниц подряд).
+        // Иначе жест передаётся внутреннему UINavigationController'у
+        // fast-app'а, чтобы тот поппил свою страницу — без этого на root
+        // fast-app экране свайп уходил в `goHome()` и убивал таб.
+        return !tab.urlStack.isEmpty
     }
 
     public var body: some View {
+        // Outer-swipe gesture крепим только когда есть куда back'ать (urlStack
+        // не пустой). На root tab fast-app'а его НЕТ — иначе SwiftUI
+        // DragGesture перехватывает touch'и в полосе x < 30pt даже с
+        // `.including: .subviews`, и tap'ы по элементам у левого края
+        // (например первая иконка bottom tab-bar'а) не доходят до них.
+        if canSwipeBack {
+            mainContent.gesture(swipeBackGesture)
+        } else {
+            mainContent
+        }
+    }
+
+    private var mainContent: some View {
         ZStack {
             // ─── content (с offset'ом от interactive swipe) ───
             ZStack {
@@ -48,7 +66,6 @@ public struct BrowserView: View {
         }
         .background(DarkPalette.bg0.ignoresSafeArea())
         .preferredColorScheme(.dark)
-        .gesture(swipeBackGesture)
     }
 
     @ViewBuilder
