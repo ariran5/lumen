@@ -1,0 +1,9 @@
+{
+  "name": "Lumen Bank",
+  "version": "0.0.1",
+  "entry": "/src/index.ts",
+  "min_runtime": "0.1",
+  "dev": true,
+  "permissions": ["biometric"],
+  "connect": []
+}

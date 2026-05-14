@@ -1,0 +1,50 @@
+// PillButton — primary CTA. Accent fill, white label, round pill shape.
+
+import { colors, radius, space } from '../lib/colors'
+
+interface PillButtonProps {
+  label: string
+  onTap: () => void
+  /** Disabled — серая заливка, onTap игнорится. */
+  disabled?: boolean | Thunk<boolean>
+  /** Compact = меньше padding (для inline action'ов). */
+  compact?: boolean
+}
+
+export function PillButton(p: PillButtonProps): RenderNode {
+  const padV = p.compact ? space.sm : space.md
+  const padH = p.compact ? space.lg : space.xl
+  const isDisabledThunk = typeof p.disabled === 'function'
+
+  return Pressable(
+    {
+      onTap: () => {
+        const d = typeof p.disabled === 'function' ? p.disabled() : p.disabled
+        if (!d) {
+          lumen.haptics('light')
+          p.onTap()
+        }
+      },
+      paddingTop: padV,
+      paddingBottom: padV,
+      paddingLeft: padH,
+      paddingRight: padH,
+      borderRadius: radius.pill,
+      backgroundColor: isDisabledThunk
+        ? () => ((p.disabled as Thunk<boolean>)() ? colors.surface : colors.accent)
+        : (p.disabled ? colors.surface : colors.accent),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    Text(
+      {
+        fontSize: 16,
+        fontWeight: '700',
+        color: isDisabledThunk
+          ? () => ((p.disabled as Thunk<boolean>)() ? colors.textTertiary : colors.textPrimary)
+          : (p.disabled ? colors.textTertiary : colors.textPrimary),
+      },
+      p.label,
+    ),
+  )
+}
