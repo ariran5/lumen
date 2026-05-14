@@ -55,6 +55,7 @@ extension JSEngine {
         installPatchBridge()
         installNotifyBridge()
         installHistoryBridge()
+        installPermissionsBridge()
     }
 
     private func installBottomSheet() {

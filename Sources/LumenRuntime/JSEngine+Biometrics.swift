@@ -31,15 +31,26 @@ extension JSEngine {
             }
         }
 
+        let originRef = origin
         let nativeAuth: @convention(block) (String?, JSValue, JSValue) -> Void = { reason, resolve, _ in
             let reason = (reason?.isEmpty == false) ? reason! : "Authenticate"
-            let ctx = LAContext()
-            ctx.localizedFallbackTitle = ""
-            ctx.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics,
-                               localizedReason: reason) { success, _ in
-                DispatchQueue.main.async {
-                    MainActor.assumeIsolated {
-                        _ = resolve.call(withArguments: [success])
+            Task { @MainActor in
+                // Per-origin Lumen-gate. Без него любой origin мог бы вызвать
+                // системный Face ID/Touch ID prompt с произвольным текстом
+                // «Authenticate to сделать что-то sketchy» — фишинг-вектор.
+                let grant = await PermissionStore.shared.request(origin: originRef, capability: .biometric)
+                guard grant == .granted else {
+                    _ = resolve.call(withArguments: [false])
+                    return
+                }
+                let ctx = LAContext()
+                ctx.localizedFallbackTitle = ""
+                ctx.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics,
+                                   localizedReason: reason) { success, _ in
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated {
+                            _ = resolve.call(withArguments: [success])
+                        }
                     }
                 }
             }

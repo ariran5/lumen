@@ -28,11 +28,23 @@ extension JSEngine {
             LumenNotificationDelegate.install()
         }
 
+        let originRef = origin
         let nativeRequest: @convention(block) (JSValue, JSValue) -> Void = { resolve, _ in
-            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
-                DispatchQueue.main.async {
-                    MainActor.assumeIsolated {
-                        _ = resolve.call(withArguments: [granted ? "granted" : "denied"])
+            Task { @MainActor in
+                // Lumen-layer gate первым: untrusted origin даже до OS не доходит.
+                let grant = await PermissionStore.shared.request(origin: originRef, capability: .notifications)
+                guard grant == .granted else {
+                    _ = resolve.call(withArguments: ["denied"])
+                    return
+                }
+                UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated {
+                            // OS-layer может всё ещё отказать (юзер ранее denied
+                            // в Settings). Lumen-уровневый grant сохраняем — это
+                            // intent юзера, OS-grant отдельный.
+                            _ = resolve.call(withArguments: [granted ? "granted" : "denied"])
+                        }
                     }
                 }
             }

@@ -16,8 +16,19 @@ extension JSEngine {
         guard let lumen = context.objectForKeyedSubscript("lumen") else { return }
         let imagePicker = JSValue(newObjectIn: context)!
 
+        let originRef = origin
         let nativePick: @convention(block) (JSValue?, JSValue, JSValue) -> Void = { config, resolve, reject in
-            MainActor.assumeIsolated {
+            Task { @MainActor in
+                // Photos gate. PHPickerViewController технически работает
+                // без `NSPhotoLibraryUsageDescription` (out-of-process picker),
+                // но мы всё равно gate'им — origin должен явно подтвердить
+                // что хочет показывать picker. Без этого untrusted сайт мог бы
+                // спамить picker'ами для phishing UI.
+                let grant = await PermissionStore.shared.request(origin: originRef, capability: .photos)
+                guard grant == .granted else {
+                    _ = resolve.call(withArguments: [NSNull()])
+                    return
+                }
                 Self.presentImagePicker(config: config, resolve: resolve, reject: reject)
             }
         }
