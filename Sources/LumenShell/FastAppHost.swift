@@ -107,6 +107,9 @@ struct FastAppHost: UIViewControllerRepresentable {
                 guard let self else { return }
                 do {
                     let bundle = try await BundleLoader.load(from: self.url)
+                    // Manifest application ДО eval'а: network policy /
+                    // declared permissions активны к моменту первого fetch'а.
+                    engine.applyManifest(bundle.manifest)
                     self.onBundleName?(bundle.manifest.name)
                     self.nav?.topViewController?.title = bundle.manifest.name
                     _ = engine.eval(bundle.script)

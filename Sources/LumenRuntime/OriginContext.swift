@@ -14,8 +14,27 @@ import Foundation
 final class OriginContext {
     let origin: Origin
 
+    /// Текущая network policy. До `applyManifest` — `.initial` (allow только
+    /// собственный host + поддомены). После применения манифеста расширяется
+    /// его `connect` списком. Шарится между табами того же origin'а через
+    /// `OriginContextRegistry` — последний загруженный манифест выигрывает.
+    private(set) var networkPolicy: NetworkPolicy
+
+    /// Декларированные манифестом capabilities (для будущего permission UI).
+    /// Сами grants не хранятся здесь — это придёт в Block 3.
+    private(set) var declaredPermissions: [String] = []
+
     init(origin: Origin) {
         self.origin = origin
+        self.networkPolicy = .initial(for: origin)
+    }
+
+    /// Применить fresh-loaded манифест. Last-write-wins для всех табов
+    /// данного origin'а. Вызывать ДО eval'а bundle.script'а, чтобы fetch'и
+    /// из user-кода уже видели правильный allowlist.
+    func applyManifest(_ manifest: LumenManifest) {
+        self.networkPolicy = NetworkPolicy(origin: origin, manifestConnect: manifest.connect)
+        self.declaredPermissions = manifest.permissions ?? []
     }
 
     /// UserDefaults-префикс. `lumen.storage.<hash>.<userkey>` — старые

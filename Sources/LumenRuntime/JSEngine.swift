@@ -54,6 +54,13 @@ final class JSEngine {
         #endif
     }
 
+    /// Прокинуть манифест в OriginContext. Должно быть вызвано ДО eval'а
+    /// bundle.script'а, чтобы network policy / declared permissions были
+    /// применены к моменту первого fetch'а из user-кода.
+    func applyManifest(_ manifest: LumenManifest) {
+        originContext.applyManifest(manifest)
+    }
+
     func nextNotifyID() -> Int {
         nextListenerID += 1
         return nextListenerID

@@ -36,6 +36,16 @@ extension JSEngine {
             return
         }
 
+        // Sandbox network policy: blocks cross-origin requests not in manifest's
+        // `connect` allowlist. См. NetworkPolicy.swift.
+        let policy = engine.originContext.networkPolicy
+        guard policy.allows(url: url) else {
+            rejectWith(engine: engine,
+                       reject: reject,
+                       message: "fetch: blocked by sandbox — '\(url.host ?? "")' is not in this app's `connect` allowlist")
+            return
+        }
+
         var req = URLRequest(url: url)
         req.timeoutInterval = 15
 
@@ -88,6 +98,9 @@ extension JSEngine {
                 }
             }
         }
+        // Task-scoped delegate (iOS 15+): валидирует cross-origin редиректы
+        // против policy. Hold ref до task'а — task ретейнит delegate'а.
+        task.delegate = NetworkRedirectGuard(policy: policy)
         task.resume()
     }
 

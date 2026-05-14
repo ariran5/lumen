@@ -21,6 +21,16 @@ extension JSEngine {
                 let onClose   = nonUndefined(callbacks?.objectForKeyedSubscript("onClose"))
                 let onError   = nonUndefined(callbacks?.objectForKeyedSubscript("onError"))
 
+                // Sandbox network policy. WS handshake — single round-trip,
+                // редиректов не следует, поэтому проверки на connect достаточно.
+                guard engine.originContext.networkPolicy.allows(url: url) else {
+                    let msg = "ws: blocked by sandbox — '\(url.host ?? "")' is not in this app's `connect` allowlist"
+                    if let onError {
+                        DispatchQueue.main.async { _ = onError.call(withArguments: [msg]) }
+                    }
+                    return nil
+                }
+
                 let bridge = WebSocketBridge(url: url,
                                              onOpen: onOpen,
                                              onMessage: onMessage,
