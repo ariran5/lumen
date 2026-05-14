@@ -28,6 +28,8 @@ const tabFactories: { [K in TabKey]: () => { render: () => RenderNode } } = {
   profile: profilePage,
 }
 
+import { sheetOpen } from './state/ui'
+
 mount(() => View(
   { flex: 1, backgroundColor: colors.bg },
 
@@ -36,6 +38,8 @@ mount(() => View(
   Slot({ flex: 1 }, () => tabFactories[activeTab.value]().render()),
 
   // Glass tab-bar поверх контента. Position 'absolute' внутри bar'а
-  // самого — gradient/translucency видны над scroll'ом.
-  TabBar(),
+  // самого — gradient/translucency видны над scroll'ом. Прячем когда
+  // открыт sheet — иначе на iOS 26 (floating sheet at medium detent)
+  // tab-bar торчит из-под sheet'а в нижнем margin'е.
+  Slot({}, () => sheetOpen.value ? null : TabBar()),
 ))

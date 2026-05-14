@@ -416,7 +416,26 @@ final class Renderer {
     /// При reconcile id узла может смениться (build-time счётчик в JS
     /// перевыдаёт ids на каждом mount-rerun). Обновляем nodeIndex чтобы
     /// per-prop effect'ы для нового id находили правильный CALayer.
+    ///
+    /// Для same-id случая мы НЕ overwrite'аем `mounted.node` целиком —
+    /// его `.style` мог быть обновлён per-prop patch'ами и является
+    /// canonical state'ом layer'а. Зато синхронизируем `text` (patchText
+    /// мутирует lastTree.text и ждёт что mount подхватит) и `source`.
     private func updateMountedNode(_ mounted: MountedNode, with next: RenderNode) {
+        let sameId = mounted.node.id != nil && mounted.node.id == next.id
+        if sameId {
+            // Sync только то что могло прийти через tree-мутации (patchText,
+            // структурные обновления). Стиль/handler'ы оставляем mount'у —
+            // он держит state, синхронизированный с per-prop patch'ами.
+            if mounted.node.text != next.text {
+                mounted.node.text = next.text
+            }
+            if mounted.node.source != next.source {
+                mounted.node.source = next.source
+            }
+            return
+        }
+
         if let oldId = mounted.node.id, oldId != next.id {
             Self.nodeIndex.removeValue(forKey: oldId)
             // Старый id больше нигде не используется (layer reused, но id
@@ -483,12 +502,37 @@ final class Renderer {
             return
         }
 
-        // Тот же kind: переиспользуем layer, применяем дельту.
-        applyAll(layer: mounted.layer,
-                 mount: mounted,
-                 node: next,
-                 flex: flex,
-                 parentOrigin: parentOrigin)
+        // Тот же kind: переиспользуем layer.
+        //
+        // Если id узла не сменился — JS не пересобирал поддерево, и
+        // `next.style` это ровно тот же style, что был построен на mount
+        // (или в последнем JS-rerun этого узла). Реальные динамические
+        // изменения визуальных пропов (color, backgroundColor, opacity, …)
+        // идут через per-prop effect'ы → `lumen._patchProp` → applyPatch,
+        // которое уже обновило layer и `mount.node.style`.
+        //
+        // Если мы здесь re-apply'нем `next.style`, мы перезапишем layer
+        // обратно из stale значения tree'а — это fight'ится с patch'ами и
+        // даёт мелькание (классический пример: TabBar где siblings
+        // постоянно rebuild'ятся, а tab-bar slot не пересоздаётся → outer
+        // tree'овский Text node остаётся со старым style.color, который
+        // перезаписывает только что положенный patch).
+        //
+        // Поэтому при same-id reconcile делаем ТОЛЬКО geometry + text/image
+        // content sync + gestures. Visual style apply пропускаем.
+        let sameId = mounted.node.id != nil && mounted.node.id == next.id
+        if sameId {
+            applyGeometryOnly(mount: mounted,
+                              node: next,
+                              flex: flex,
+                              parentOrigin: parentOrigin)
+        } else {
+            applyAll(layer: mounted.layer,
+                     mount: mounted,
+                     node: next,
+                     flex: flex,
+                     parentOrigin: parentOrigin)
+        }
         counter += 1
 
         if next.kind == .virtualList {
@@ -702,6 +746,52 @@ final class Renderer {
             }
         }
 
+        applyGestures(layer: layer, node: node)
+    }
+
+    /// Subset of applyAll: только geometry/gestures/image-source/text-content,
+    /// БЕЗ apply'я визуальных стилей. Используется при reconcile same-id
+    /// узла — стили там уже наложены mount'ом или последним per-prop
+    /// patch'ем, и переписывать их из (потенциально stale) lastTree нельзя.
+    /// Текст-контент при этом обновляется: patchText мутирует lastTree.text,
+    /// и здесь мы синхронизируем layer + mount.node.text.
+    private func applyGeometryOnly(mount: MountedNode,
+                                   node: RenderNode,
+                                   flex: FlexNode,
+                                   parentOrigin: CGPoint) {
+        let layer = mount.layer
+        let bounds = CGRect(x: 0, y: 0,
+                            width: flex.frame.width,
+                            height: flex.frame.height)
+        let position = CGPoint(
+            x: flex.frame.midX - parentOrigin.x,
+            y: flex.frame.midY - parentOrigin.y
+        )
+        if layer.bounds != bounds { layer.bounds = bounds }
+        if layer.position != position { layer.position = position }
+
+        // Text content sync: patchText мутирует tree, но layer.string держит
+        // прежний текст. Перерисовываем используя mount.node.style — там
+        // живут per-prop patched цвета/шрифты, а не stale tree style.
+        if node.kind == .text,
+           let textLayer = layer as? CATextLayer,
+           mount.node.text != node.text,
+           let newText = node.text {
+            applyTextStyle(textLayer, text: newText, style: mount.node.style)
+        }
+
+        // Image source sync — аналогично.
+        if node.kind == .image, let src = node.source {
+            if mount.loadedImageSource != src {
+                applyImage(layer: layer, source: src)
+                mount.loadedImageSource = src
+            }
+        }
+
+        applyGestures(layer: layer, node: node)
+    }
+
+    private func applyGestures(layer: CALayer, node: RenderNode) {
         if let router = gestureRouter {
             var g = LayerGestures()
             g.onTap = node.onTap

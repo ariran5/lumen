@@ -70,7 +70,7 @@ public struct BrowserView: View {
 
     @ViewBuilder
     private var chromeOverlay: some View {
-        if let active = tabs.activeTab {
+        if let active = tabs.activeTab, active.chromeMode != .hidden {
             VStack(spacing: 8) {
                 if isAddressFocused {
                     AddressSuggestions(query: active.addressInput) { url in
@@ -163,9 +163,13 @@ private struct TabContent: View {
                 WebTabView(tab: tab)
                     .ignoresSafeArea()
             case .fastApp(let url):
-                FastAppHost(url: url, tabID: tab.id, onBundleName: { name in
-                    tab.pageTitle = name
-                })
+                FastAppHost(url: url, tabID: tab.id,
+                            onBundleName: { name in
+                                tab.pageTitle = name
+                            },
+                            onChromeMode: { mode in
+                                tab.chromeMode = mode
+                            })
                 .id(url.absoluteString)
                 .ignoresSafeArea()
             }

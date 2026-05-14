@@ -6,9 +6,12 @@ struct FastAppHost: UIViewControllerRepresentable {
     let url: URL
     let tabID: UUID
     var onBundleName: ((String) -> Void)? = nil
+    var onChromeMode: ((ChromeMode) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(url: url, tabID: tabID, onBundleName: onBundleName)
+        Coordinator(url: url, tabID: tabID,
+                    onBundleName: onBundleName,
+                    onChromeMode: onChromeMode)
     }
 
     func makeUIViewController(context: Context) -> UINavigationController {
@@ -60,6 +63,7 @@ struct FastAppHost: UIViewControllerRepresentable {
         let url: URL
         let tabID: UUID
         let onBundleName: ((String) -> Void)?
+        let onChromeMode: ((ChromeMode) -> Void)?
         var engine: JSEngine?
         var nav: UINavigationController?
         var rootPage: LumenPageViewController?
@@ -68,10 +72,13 @@ struct FastAppHost: UIViewControllerRepresentable {
         private var devClient: DevServerClient?
         private let jsLogger = os.Logger(subsystem: "com.lumen.js", category: "console")
 
-        init(url: URL, tabID: UUID, onBundleName: ((String) -> Void)?) {
+        init(url: URL, tabID: UUID,
+             onBundleName: ((String) -> Void)?,
+             onChromeMode: ((ChromeMode) -> Void)?) {
             self.url = url
             self.tabID = tabID
             self.onBundleName = onBundleName
+            self.onChromeMode = onChromeMode
         }
 
         /// Создать новый JSEngine, поставить все bridges, eval framework.
@@ -116,6 +123,10 @@ struct FastAppHost: UIViewControllerRepresentable {
                     engine.applyManifest(bundle.manifest)
                     self.onBundleName?(bundle.manifest.name)
                     self.nav?.topViewController?.title = bundle.manifest.name
+                    // Manifest's `chrome: "hidden|compact|full"` управляет
+                    // видимостью shell URL-bar'а. Default — .compact.
+                    let mode = ChromeMode(rawValue: bundle.manifest.chrome ?? "compact") ?? .compact
+                    self.onChromeMode?(mode)
                     _ = engine.eval(bundle.script)
                     if bundle.manifest.dev == true {
                         self.connectDevServer()

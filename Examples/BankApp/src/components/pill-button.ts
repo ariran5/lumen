@@ -1,4 +1,8 @@
 // PillButton — primary CTA. Accent fill, white label, round pill shape.
+//
+// ВНИМАНИЕ к багу ядра: thunk на `backgroundColor` parent View'а ломает
+// рендер дочерних Text'ов. Поэтому здесь backgroundColor СТАТИЧЕН, а
+// disabled-визуализация — через `opacity` (для неё patchProp работает).
 
 import { colors, radius, space } from '../lib/colors'
 
@@ -30,9 +34,11 @@ export function PillButton(p: PillButtonProps): RenderNode {
       paddingLeft: padH,
       paddingRight: padH,
       borderRadius: radius.pill,
-      backgroundColor: isDisabledThunk
-        ? () => ((p.disabled as Thunk<boolean>)() ? colors.surface : colors.accent)
-        : (p.disabled ? colors.surface : colors.accent),
+      backgroundColor: colors.accent,
+      // Dim через opacity (этот thunk-патч работает). Disabled → 0.4.
+      opacity: isDisabledThunk
+        ? () => ((p.disabled as Thunk<boolean>)() ? 0.4 : 1)
+        : (p.disabled ? 0.4 : 1),
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -40,9 +46,7 @@ export function PillButton(p: PillButtonProps): RenderNode {
       {
         fontSize: 16,
         fontWeight: '700',
-        color: isDisabledThunk
-          ? () => ((p.disabled as Thunk<boolean>)() ? colors.textTertiary : colors.textPrimary)
-          : (p.disabled ? colors.textTertiary : colors.textPrimary),
+        color: colors.textPrimary,
       },
       p.label,
     ),

@@ -7,6 +7,7 @@ import { PillButton } from '../components/pill-button'
 import { colors, radius, space } from '../lib/colors'
 import { makeTransfer, BankAPIError } from '../services/bank-api'
 import { balanceCents } from '../state/account'
+import { sheetOpen } from '../state/ui'
 
 export function openSendSheet(): void {
   // Local form state, живёт пока sheet открыт. Каждый показ — новая копия.
@@ -57,34 +58,43 @@ export function openSendSheet(): void {
     }
   }
 
+  sheetOpen.value = true
   lumen.bottomSheet({
-    height: 'large',
+    // medium — sheet начинает с middle-detent, задний VC уменьшается с
+    // параллаксом (iOS 26 card-stack). User может drag'нуть до large.
+    height: 'medium',
+    onClose: () => { sheetOpen.value = false },
+    // Без backgroundColor — iOS 26 sheet сам показывает Liquid Glass
+    // material под content'ом. Свой непрозрачный фон бы это перекрыл и
+    // на morph'е к .large detent'у не дал бы system'е сделать transition
+    // к opaque-сэндвичу.
     content: View(
-      {
-        flex: 1,
-        backgroundColor: colors.bg,
-        paddingTop: space.lg,
-        paddingBottom: Math.max(lumen.safeArea.bottom, space.lg),
-        paddingLeft: space.lg,
-        paddingRight: space.lg,
-        gap: space.lg,
-      },
+      { flex: 1 },
       grabber(),
-      Text({ fontSize: 22, fontWeight: '800', color: colors.textPrimary }, 'Send money'),
-      formField('Recipient', recipient, 'Full name', 'words'),
-      formField('IBAN', iban, 'IL21 0040 5000 1234 5678 9012', 'characters'),
-      formField('Amount (USD)', amountStr, '0.00', 'none', 'decimal'),
-      formField('Note (optional)', note, 'Coffee, rent, …', 'sentences'),
-      Slot({}, () => errorMessage.value
-        ? View(
-            {
-              backgroundColor: '#3A1F1F', borderColor: colors.negative, borderWidth: 1,
-              borderRadius: radius.control, padding: space.md,
-            },
-            Text({ color: colors.negative, fontSize: 13 }, errorMessage.value!),
-          )
-        : null),
-      PillButton({ label: 'Send', disabled: () => !canSubmit.value, onTap: submit }),
+      ScrollView(
+        {
+          flex: 1,
+          paddingBottom: Math.max(lumen.safeArea.bottom, space.lg),
+          paddingLeft: space.lg,
+          paddingRight: space.lg,
+          gap: space.lg,
+        },
+        Text({ fontSize: 22, fontWeight: '800', color: colors.textPrimary }, 'Send money'),
+        formField('Recipient', recipient, 'Full name', 'words'),
+        formField('IBAN', iban, 'IL21 0040 5000 1234 5678 9012', 'characters'),
+        formField('Amount (USD)', amountStr, '0.00', 'none', 'decimal'),
+        formField('Note (optional)', note, 'Coffee, rent, …', 'sentences'),
+        Slot({}, () => errorMessage.value
+          ? View(
+              {
+                backgroundColor: '#3A1F1F', borderColor: colors.negative, borderWidth: 1,
+                borderRadius: radius.control, padding: space.md,
+              },
+              Text({ color: colors.negative, fontSize: 13 }, errorMessage.value!),
+            )
+          : null),
+        PillButton({ label: 'Send', disabled: () => !canSubmit.value, onTap: submit }),
+      ),
     ),
   })
 }

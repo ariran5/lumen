@@ -7,6 +7,14 @@ enum TabMode: Equatable {
     case fastApp(URL)
 }
 
+/// Видимость shell URL-chrome'а в табе. Управляется manifest'ом
+/// fast-app'а (поле `chrome` в `.well-known/lumen.json`).
+enum ChromeMode: String, Equatable {
+    case compact   // default — 46pt disc с favicon
+    case full      // полная адресная строка
+    case hidden    // полностью скрыт (для apps со своим bottom UI)
+}
+
 /// Направление навигации — определяет анимацию slide-перехода в shell.
 enum NavDirection {
     case forward   // push: вперёд (новая страница из правого края)
@@ -21,6 +29,7 @@ final class TabModel: Identifiable {
     let id: UUID = UUID()
     var addressInput: String = ""
     var mode: TabMode = .fastApp(homeURL)
+    var chromeMode: ChromeMode = .compact
     var isLoading: Bool = false
     var pageTitle: String = ""
     var canGoBack: Bool = false
@@ -59,6 +68,9 @@ final class TabModel: Identifiable {
         }
         guard let url = Self.normalize(addressInput) else { return }
         addressInput = url.absoluteString
+        // Сбрасываем chromeMode — каждый новый fast-app должен заявить
+        // свой режим явно через manifest после loadBundle.
+        chromeMode = .compact
 
         // Direction для slide-анимации. goBack() поднимает свой флаг и сам
         // выставляет .back до вызова commit().

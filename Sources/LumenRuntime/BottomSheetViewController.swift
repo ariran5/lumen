@@ -6,6 +6,7 @@ final class BottomSheetViewController: UIViewController {
     private var renderer: Renderer?
     private var contentView: UIView?
     private var didFireDismiss = false
+    private var lastRenderedSize: CGSize = .zero
 
     var onDismiss: (() -> Void)?
 
@@ -19,16 +20,12 @@ final class BottomSheetViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        // iOS 26: НЕ ставим backgroundColor — система сама накладывает
-        // Liquid Glass на sheet container. Любой свой непрозрачный фон
-        // даст артефакт-rim по краям (известная проблема).
-        // Стиль (light/dark) наследуем от системы, чтобы Glass совпадал
-        // с цветовой схемой приложения.
-        if #available(iOS 26.0, *) {
-            view.backgroundColor = .clear
-        } else {
-            view.backgroundColor = .systemBackground
-        }
+        // Прозрачный backgroundColor у нашей VC.view'хи чтобы под content'ом
+        // светилось sheet container's окружение: на iOS 26 это Liquid Glass
+        // material (partial detent) или opaque системный фон (.large detent).
+        // Default UIViewController'а — .systemBackground (dark в dark mode),
+        // что перекрыло бы sheet'овский фон сплошным тёмным.
+        view.backgroundColor = .clear
 
         let host = UIView()
         host.translatesAutoresizingMaskIntoConstraints = false
@@ -46,6 +43,15 @@ final class BottomSheetViewController: UIViewController {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        let size = view.bounds.size
+        guard size.width > 0, size.height > 0 else { return }
+        // Рендерим ровно ОДИН раз на первом valid bounds. Никаких re-render'ов
+        // при detent change'е — Renderer'овские explicit CALayer positions не
+        // умеют плавно follow'ить sheet morph (получаются snap'ы или
+        // mismatched timing). Content остаётся на своих позициях, sheet
+        // визуально растёт вокруг него.
+        if lastRenderedSize != .zero { return }
+        lastRenderedSize = size
         renderer?.render(content)
     }
 

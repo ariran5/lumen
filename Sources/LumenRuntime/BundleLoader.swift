@@ -23,8 +23,14 @@ struct LumenManifest: Decodable, Sendable {
     /// потребуется отдельный permission-prompt. Принимает "200MB", "1GB".
     let storageQuota: String?
 
+    /// Управление видимостью shell-chrome'а (URL bar disc снизу).
+    /// `"hidden"` — спрятать целиком (для apps со своим bottom-UI типа
+    /// tab-bar'а). `"compact"` (default) — стандартный compact disc.
+    /// `"full"` — всегда полная адресная строка.
+    let chrome: String?
+
     enum CodingKeys: String, CodingKey {
-        case name, version, entry, dev, permissions, connect
+        case name, version, entry, dev, permissions, connect, chrome
         case minRuntime = "min_runtime"
         case storageQuota = "storage_quota"
     }
@@ -165,7 +171,8 @@ enum BundleLoader {
             dev: false,
             permissions: nil,
             connect: nil,
-            storageQuota: nil
+            storageQuota: nil,
+            chrome: nil
         )
         return LumenBundle(manifest: manifest, script: script, origin: url)
     }

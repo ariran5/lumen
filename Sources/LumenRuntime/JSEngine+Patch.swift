@@ -58,41 +58,55 @@ extension JSEngine {
         CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
 
+        // Per-prop patch — source of truth для динамических визуальных
+        // пропов. Обновляем layer + mount.node.style; lastTree оставляем
+        // в покое — reconcile для same-id узлов пропускает re-apply
+        // визуальных стилей, так что stale lastTree не fight'ится с
+        // patch'ами (см. applyGeometryOnly в Renderer.swift).
+
         switch key {
         case "opacity":
             if value.isNumber {
-                layer.opacity = Float(value.toDouble())
+                let v = value.toDouble()
+                layer.opacity = Float(v)
+                mount.node.style.opacity = v
             }
 
         case "backgroundColor":
             if value.isString, let s = value.toString(),
                let c = RenderNode.parseColor(s) {
                 layer.backgroundColor = c
+                mount.node.style.backgroundColor = c
             }
 
         case "borderColor":
             if value.isString, let s = value.toString(),
                let c = RenderNode.parseColor(s) {
                 layer.borderColor = c
+                mount.node.style.borderColor = c
             }
 
         case "borderWidth":
             if value.isNumber {
-                layer.borderWidth = CGFloat(value.toDouble())
+                let v = value.toDouble()
+                layer.borderWidth = CGFloat(v)
+                mount.node.style.borderWidth = v
             }
 
         case "borderRadius":
             if value.isNumber {
-                layer.cornerRadius = CGFloat(value.toDouble())
+                let v = value.toDouble()
+                layer.cornerRadius = CGFloat(v)
                 layer.masksToBounds = layer.cornerRadius > 0
+                mount.node.style.borderRadius = v
             }
 
         case "text":
             if value.isString, let s = value.toString() {
                 // Делегируем Renderer.patchText: обновляет lastTree + relayout.
-                // RenderNode — struct, поэтому просто менять mount.node.text
-                // недостаточно — следующий reconcile откатит layer на старый
-                // текст из lastTree.
+                // patchText триггерит reconcile, который через applyGeometryOnly
+                // подхватит изменение текста (frame'ы пересчитаются по новой
+                // длине, layer.string обновится с current style из mount.node).
                 ref.renderer?.patchText(id: id, text: s)
             }
 

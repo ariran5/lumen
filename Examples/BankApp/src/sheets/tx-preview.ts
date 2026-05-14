@@ -21,7 +21,7 @@ export function openTxPreviewSheet(txID: number): void {
     content: View(
       {
         flex: 1,
-        backgroundColor: colors.bg,
+        // backgroundColor: colors.bg,
         paddingTop: space.md,
         paddingBottom: Math.max(lumen.safeArea.bottom, space.lg),
         paddingLeft: space.lg,
