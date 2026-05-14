@@ -1,14 +1,18 @@
-// Home / dashboard. Hero card с балансом, quick-action row, top-5 транзакций.
+// Home / dashboard. Hero card с балансом + quick-action row (Send/Deposit
+// открывают bottom-sheet'ы, не push'ат страницу — экшены модальные, чтобы
+// не выбрасывать юзера из контекста). Tap по recent tx row → preview sheet
+// с кнопкой «View full details» которая уже пушит full detail.
 
-import { Header } from '../components/header'
 import { GlassCard } from '../components/glass-card'
-import { TxRow } from '../components/tx-row'
 import { Amount } from '../components/amount'
 import { colors, radius, space } from '../lib/colors'
 import { money } from '../lib/format'
-import { open } from '../lib/router'
 import { account, balanceCents } from '../state/account'
 import { monthIncome, monthSpending, transactions } from '../state/transactions'
+import { TAB_BAR_HEIGHT, activeTab } from '../state/ui'
+import { openSendSheet } from '../sheets/send'
+import { openDepositSheet } from '../sheets/deposit'
+import { openTxPreviewSheet } from '../sheets/tx-preview'
 
 export function homePage() {
   return {
@@ -20,15 +24,24 @@ function renderHome(): RenderNode {
   return View(
     { flex: 1, backgroundColor: colors.bg },
 
-    Header({ title: 'Lumen Bank', rightLabel: 'Profile', onRight: () => open('profile') }),
+    // Greeting bar — заменяет «Header» компонент, потому что top tab-page
+    // не нужен title + back. Большие свободные поля сверху делают
+    // визуальное «дыхание», как в современных банковских apps.
+    View(
+      {
+        paddingTop: lumen.safeArea.top + space.md,
+        paddingBottom: space.md,
+        paddingLeft: space.lg, paddingRight: space.lg,
+      },
+      Text({ fontSize: 13, color: colors.textTertiary, fontWeight: '500' }, 'Welcome back,'),
+      Text({ fontSize: 22, fontWeight: '700', color: colors.textPrimary }, () => account.value.holderName.split(' ')[0]!),
+    ),
 
     ScrollView(
       {
         flex: 1,
-        paddingTop: space.sm,
-        paddingBottom: Math.max(lumen.safeArea.bottom, space.lg) + space.xxl,
-        paddingLeft: space.lg,
-        paddingRight: space.lg,
+        paddingBottom: TAB_BAR_HEIGHT + Math.max(lumen.safeArea.bottom, space.lg) + space.xl,
+        paddingLeft: space.lg, paddingRight: space.lg,
         gap: space.lg,
       },
       heroCard(),
@@ -59,23 +72,22 @@ function heroCard(): RenderNode {
 function actionGrid(): RenderNode {
   return View(
     { flexDirection: 'row', gap: space.md },
-    actionTile('↗', 'Send', () => open('transfer')),
-    actionTile('≡', 'History', () => open('transactions')),
-    actionTile('⚙', 'Settings', () => open('profile')),
+    actionTile('↗', 'Send', openSendSheet),
+    actionTile('⬇', 'Deposit', openDepositSheet),
+    actionTile('≡', 'History', () => { activeTab.value = 'history' }),
   )
 }
 
 function actionTile(icon: string, label: string, onTap: () => void): RenderNode {
   return Pressable(
     {
-      onTap,
+      onTap: () => { lumen.haptics('light'); onTap() },
       flex: 1,
-      paddingTop: space.lg,
-      paddingBottom: space.lg,
+      paddingTop: space.lg, paddingBottom: space.lg,
       borderRadius: radius.card,
       backgroundColor: colors.surface,
-      alignItems: 'center',
-      gap: space.sm,
+      borderWidth: 1, borderColor: colors.border,
+      alignItems: 'center', gap: space.sm,
     },
     Text({ fontSize: 22, color: colors.textPrimary }, icon),
     Text({ fontSize: 13, fontWeight: '600', color: colors.textPrimary }, label),
@@ -109,12 +121,37 @@ function recentSection(): RenderNode {
       { flexDirection: 'row', alignItems: 'center', paddingLeft: space.md, paddingRight: space.md, paddingTop: space.sm },
       Text({ flex: 1, fontSize: 12, color: colors.textTertiary, fontWeight: '600' }, 'RECENT'),
       Pressable(
-        { onTap: () => open('transactions'), paddingTop: space.xs, paddingBottom: space.xs },
+        { onTap: () => { activeTab.value = 'history' }, paddingTop: space.xs, paddingBottom: space.xs },
         Text({ fontSize: 13, color: colors.accentHi, fontWeight: '600' }, 'See all →'),
       ),
     ),
-    // Slot — реактивный subtree: при изменении transactions.value
-    // ребилдится только этот список, не весь дашборд.
-    Slot({ gap: 0 }, () => transactions.value.slice(0, 5).map(TxRow)),
+    Slot({ gap: 0 }, () => transactions.value.slice(0, 5).map(t =>
+      Pressable(
+        {
+          key: 'home-tx-' + t.id,
+          // Quick-preview sheet вместо push — для home показываем lightweight
+          // прехват; в History/Cards эта же row может пушить full detail.
+          onTap: () => { lumen.haptics('soft'); openTxPreviewSheet(t.id) },
+          flexDirection: 'row', alignItems: 'center', gap: space.md,
+          paddingTop: space.md, paddingBottom: space.md,
+          paddingLeft: space.md, paddingRight: space.md,
+          borderRadius: radius.control,
+        },
+        View(
+          {
+            width: 40, height: 40, borderRadius: radius.pill,
+            backgroundColor: colors.surfaceElevated,
+            alignItems: 'center', justifyContent: 'center',
+          },
+          Text({ fontSize: 20 }, t.icon),
+        ),
+        View(
+          { flex: 1, gap: 2 },
+          Text({ fontSize: 15, fontWeight: '600', color: colors.textPrimary, numberOfLines: 1 }, t.name),
+          Text({ fontSize: 12, color: colors.textTertiary }, t.category),
+        ),
+        Amount({ cents: t.amountCents, size: 15, weight: '600' }),
+      ),
+    )),
   )
 }

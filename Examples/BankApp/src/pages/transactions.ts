@@ -3,8 +3,8 @@
 import { Header } from '../components/header'
 import { TxRow } from '../components/tx-row'
 import { colors, radius, space } from '../lib/colors'
-import { back } from '../lib/router'
 import { filter, visibleTransactions, type TxFilter } from '../state/transactions'
+import { TAB_BAR_HEIGHT } from '../state/ui'
 
 export function transactionsPage() {
   return {
@@ -13,33 +13,38 @@ export function transactionsPage() {
 }
 
 function renderTransactions(): RenderNode {
+  // ВАЖНО: общая форма всех tab-pages: View(Top, ScrollView(...)). Если
+  // index'ы детей расходятся между табами (Home: View+ScrollView;
+  // History раньше: View+View+ScrollView), reconcile видит kind-diff на
+  // том же индексе и пересоздаёт ScrollView UIView. Каждое такое
+  // пересоздание ставит свежий UIView поверх tab-bar'а и ломает
+  // z-порядок до следующего relayout'а. Filter-chips переехали ВНУТРЬ
+  // ScrollView'а как первая «строка».
   return View(
     { flex: 1, backgroundColor: colors.bg },
 
-    Header({ title: 'Transactions', leftIcon: '‹', onLeft: back }),
+    Header({ title: 'Transactions' }),
 
-    // Filter chip row
-    View(
-      {
-        flexDirection: 'row',
-        gap: space.sm,
-        paddingLeft: space.lg,
-        paddingRight: space.lg,
-        paddingBottom: space.md,
-      },
-      filterChip('all', 'All'),
-      filterChip('income', 'Income'),
-      filterChip('spending', 'Spending'),
-    ),
-
-    // Scroll-список. Slot — реактивный, при смене filter ребилдится только он.
     ScrollView(
       {
         flex: 1,
         paddingLeft: space.md,
         paddingRight: space.md,
-        paddingBottom: Math.max(lumen.safeArea.bottom, space.lg),
+        paddingBottom: TAB_BAR_HEIGHT + Math.max(lumen.safeArea.bottom, space.lg) + space.lg,
       },
+      // Filter chip row (теперь sticky-less заголовок в скролле)
+      View(
+        {
+          flexDirection: 'row',
+          gap: space.sm,
+          paddingLeft: space.sm,
+          paddingRight: space.sm,
+          paddingBottom: space.md,
+        },
+        filterChip('all', 'All'),
+        filterChip('income', 'Income'),
+        filterChip('spending', 'Spending'),
+      ),
       Slot({ gap: 0 }, () => visibleTransactions.value.map(TxRow)),
     ),
   )

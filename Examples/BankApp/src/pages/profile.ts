@@ -4,9 +4,9 @@
 import { Header } from '../components/header'
 import { GlassCard } from '../components/glass-card'
 import { colors, radius, space } from '../lib/colors'
-import { back } from '../lib/router'
 import { account } from '../state/account'
 import { receiveDeposit } from '../services/bank-api'
+import { TAB_BAR_HEIGHT } from '../state/ui'
 
 export function profilePage() {
   return {
@@ -18,13 +18,13 @@ function renderProfile(): RenderNode {
   return View(
     { flex: 1, backgroundColor: colors.bg },
 
-    Header({ title: 'Profile', leftIcon: '‹', onLeft: back }),
+    Header({ title: 'Profile' }),
 
     ScrollView(
       {
         flex: 1,
         paddingTop: space.md,
-        paddingBottom: Math.max(lumen.safeArea.bottom, space.lg) + space.xxl,
+        paddingBottom: TAB_BAR_HEIGHT + Math.max(lumen.safeArea.bottom, space.lg) + space.lg,
         paddingLeft: space.lg,
         paddingRight: space.lg,
         gap: space.lg,
