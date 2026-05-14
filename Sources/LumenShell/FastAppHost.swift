@@ -1,175 +1,52 @@
-import os
 import SwiftUI
 import UIKit
 
+/// SwiftUI обёртка над per-tab fast-app runtime. Сам JSEngine + UIKit
+/// hierarchy живёт в `TabModel.runtime` (TabRuntime) — этот View лишь
+/// прикрепляет/откладывает nav-controller в SwiftUI tree.
+///
+/// Multi-tab: при переключении табов SwiftUI выкидывает старый FastAppHost
+/// и создаёт новый для активной таб'ы. makeUIViewController возвращает
+/// runtime.nav того же TabModel'а — UIKit re-parent'ит nav, JSEngine
+/// продолжает работать без перезагрузки.
 struct FastAppHost: UIViewControllerRepresentable {
+    @Bindable var tab: TabModel
     let url: URL
-    let tabID: UUID
-    var onBundleName: ((String) -> Void)? = nil
-    var onChromeMode: ((ChromeMode) -> Void)? = nil
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(url: url, tabID: tabID,
-                    onBundleName: onBundleName,
-                    onChromeMode: onChromeMode)
-    }
 
     func makeUIViewController(context: Context) -> UINavigationController {
-        let rootPage = LumenPageViewController(title: nil)
-        let nav = UINavigationController(rootViewController: rootPage)
-        nav.navigationBar.prefersLargeTitles = false
-        nav.view.backgroundColor = UIColor(red: 0.043, green: 0.043, blue: 0.059, alpha: 1)
-        // Скрываем nav bar — chrome теперь живёт в shell'е, fast-app не
-        // должен рисовать свою верхнюю плашку.
-        nav.setNavigationBarHidden(true, animated: false)
-        // UIKit gotcha: при hidden nav-bar interactivePopGestureRecognizer
-        // по дефолту перестаёт распознаваться. Сбрасываем его delegate в
-        // nil, чтобы edge-swipe-to-pop работал на любых страницах глубже
-        // root'а. На root (стек == 1) UIKit сам игнорирует жест.
-        nav.interactivePopGestureRecognizer?.delegate = nil
-
-        rootPage.loadViewIfNeeded()
-
-        context.coordinator.nav = nav
-        context.coordinator.rootPage = rootPage
-        context.coordinator.setupEngine()
-
-        rootPage.onLayout = { [weak coord = context.coordinator] in
-            coord?.loadIfNeeded()
-        }
-
-        return nav
+        let runtime = ensureRuntime()
+        return runtime.nav
     }
 
     func updateUIViewController(_ uiViewController: UINavigationController, context: Context) {
-        context.coordinator.loadIfNeeded()
+        // Engine может быть ещё не подписан на loadIfNeeded если view bounds
+        // на этом шаге уже 0 (rare). loadIfNeeded идемпотентен.
+        tab.runtime?.loadIfNeeded()
     }
 
-    private static func styleNavBar(_ nav: UINavigationController) {
-        let appearance = UINavigationBarAppearance()
-        appearance.configureWithOpaqueBackground()
-        appearance.backgroundColor = UIColor(red: 0.06, green: 0.06, blue: 0.07, alpha: 1)
-        appearance.titleTextAttributes = [.foregroundColor: UIColor.white]
-        appearance.largeTitleTextAttributes = [.foregroundColor: UIColor.white]
-        appearance.shadowColor = .clear
-        nav.navigationBar.standardAppearance = appearance
-        nav.navigationBar.scrollEdgeAppearance = appearance
-        nav.navigationBar.compactAppearance = appearance
-        nav.navigationBar.tintColor = .white
+    static func dismantleUIViewController(_ uiViewController: UINavigationController,
+                                          coordinator: Void) {
+        // SwiftUI зовёт dismantle когда уносит представление. Сам nav
+        // удерживается из TabModel.runtime — он переживёт этот зов и
+        // вернётся в новом makeUIViewController при возвращении на эту табу.
+        // Дополнительно ничего не нужно: UIKit аккуратно сделает
+        // willMove(toParent: nil) когда родитель уберёт нас из children.
     }
 
-    @MainActor
-    final class Coordinator {
-        let url: URL
-        let tabID: UUID
-        let onBundleName: ((String) -> Void)?
-        let onChromeMode: ((ChromeMode) -> Void)?
-        var engine: JSEngine?
-        var nav: UINavigationController?
-        var rootPage: LumenPageViewController?
-        var didLoad = false
-
-        private var devClient: DevServerClient?
-        private let jsLogger = os.Logger(subsystem: "com.lumen.js", category: "console")
-
-        init(url: URL, tabID: UUID,
-             onBundleName: ((String) -> Void)?,
-             onChromeMode: ((ChromeMode) -> Void)?) {
-            self.url = url
-            self.tabID = tabID
-            self.onBundleName = onBundleName
-            self.onChromeMode = onChromeMode
+    /// Создаёт TabRuntime если у таба его ещё нет. Привязывает callback'и
+    /// обратно в TabModel.
+    private func ensureRuntime() -> TabRuntime {
+        if let existing = tab.runtime, existing.url == url {
+            return existing
         }
-
-        /// Создать новый JSEngine, поставить все bridges, eval framework.
-        /// Вызывается изначально и при hot-reload.
-        func setupEngine() {
-            guard let rootPage, let nav, let rootRenderer = rootPage.renderer else { return }
-            // Origin = scheme+host+port URL'а app'а. Bridges получают
-            // namespace для storage/Keychain/FS из этого Origin. Если URL
-            // без host (теоретически невозможно после normalize) — fallback
-            // на system, чтобы не падать.
-            let origin = Origin(url: url) ?? .system
-            let engine = JSEngine(origin: origin)
-            engine.onLog = { [weak self] level, msg in
-                print("[js \(level.rawValue)] \(msg)")
-                self?.jsLogger.info("\(level.rawValue, privacy: .public): \(msg, privacy: .public)")
-            }
-            engine.installRenderBridge(renderer: rootRenderer)
-            engine.installRouterBridge(navController: nav)
-            engine.installPlatformBridges()
-            engine.installTabsBridge(ownTabID: tabID)
-            engine.eval(CoreFramework.script)
-            self.engine = engine
-
-            // Push initial safe-area + подписаться на изменения
-            rootPage.onSafeAreaChange = { [weak engine] insets in
-                engine?.updateSafeArea(insets)
-            }
-            engine.updateSafeArea(rootPage.view.safeAreaInsets)
+        let rt = TabRuntime(url: url, tabID: tab.id)
+        rt.onBundleName = { [weak tab] name in
+            tab?.pageTitle = name
         }
-
-        func loadIfNeeded() {
-            guard !didLoad,
-                  let engine,
-                  rootPage?.view.bounds.width ?? 0 > 0 else { return }
-            didLoad = true
-            Task { [weak self] in
-                guard let self else { return }
-                do {
-                    let bundle = try await BundleLoader.load(from: self.url)
-                    // Manifest application ДО eval'а: network policy /
-                    // declared permissions активны к моменту первого fetch'а.
-                    engine.applyManifest(bundle.manifest)
-                    self.onBundleName?(bundle.manifest.name)
-                    self.nav?.topViewController?.title = bundle.manifest.name
-                    // Manifest's `chrome: "hidden|compact|full"` управляет
-                    // видимостью shell URL-bar'а. Default — .compact.
-                    let mode = ChromeMode(rawValue: bundle.manifest.chrome ?? "compact") ?? .compact
-                    self.onChromeMode?(mode)
-                    _ = engine.eval(bundle.script)
-                    if bundle.manifest.dev == true {
-                        self.connectDevServer()
-                    }
-                } catch {
-                    engine.eval("console.error('Bundle load failed: \(error.localizedDescription)')")
-                }
-            }
+        rt.onChromeMode = { [weak tab] mode in
+            tab?.chromeMode = mode
         }
-
-        private func connectDevServer() {
-            guard devClient == nil, let client = DevServerClient(baseURL: url) else { return }
-            client.onReload = { [weak self] in
-                print("[lumen] hot reload triggered")
-                self?.performReload()
-            }
-            client.connect()
-            self.devClient = client
-        }
-
-        private func performReload() {
-            guard let nav else { return }
-
-            // Animation state привязан к старым CALayer'ам, которые умрут после
-            // setViewControllers. Без reset id'ы AnimatedValue пересекутся со
-            // stale-записями (new context стартует ids с 1).
-            AnimationManager.shared.reset()
-
-            // Hot reload через полное пересоздание page + engine:
-            // старый rootPage / Renderer / VirtualListView освобождаются
-            // ARC'ом, и в дереве UIView не остаётся dangling-ссылок (была
-            // crash на _updateSafeAreaInsets после partial cleanup).
-            let newRoot = LumenPageViewController(title: nav.topViewController?.title)
-            newRoot.loadViewIfNeeded()
-            nav.setViewControllers([newRoot], animated: false)
-            self.rootPage = newRoot
-            newRoot.onLayout = { [weak self] in
-                self?.loadIfNeeded()
-            }
-
-            setupEngine()
-            didLoad = false
-            loadIfNeeded()
-        }
+        tab.runtime = rt
+        return rt
     }
 }

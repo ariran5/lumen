@@ -39,6 +39,12 @@ final class TabModel: Identifiable {
     /// предыдущий URL; `goBack()` поппит. Дом не пушим (он база).
     private(set) var urlStack: [URL] = []
 
+    /// Per-tab fast-app runtime (JSEngine + UIKit host) — выживает SwiftUI
+    /// rebuild'ы при tab switch'е, поэтому JS state / signals / module
+    /// memory не теряются. Освобождается когда TabsStore.close выбрасывает
+    /// этот TabModel из массива. Лениво создаётся в FastAppHost.
+    @ObservationIgnored var runtime: TabRuntime?
+
     /// Флаг чтобы `goBack()` не пушил URL обратно в стек при reuse `commit()`.
     private var isBackNavigating: Bool = false
 
@@ -46,10 +52,10 @@ final class TabModel: Identifiable {
     /// asymmetric slide-transition (forward — справа влево, back — наоборот).
     var lastNavDirection: NavDirection = .forward
 
-    /// Short display title — fallback chain: pageTitle > host > "New Tab".
+    /// Short display title — fallback chain: pageTitle > host:port > "New Tab".
     var displayTitle: String {
         if !pageTitle.isEmpty { return pageTitle }
-        if let host = currentURL?.host { return host }
+        if let url = currentURL { return url.hostForDisplay }
         return "New Tab"
     }
 
@@ -71,6 +77,12 @@ final class TabModel: Identifiable {
         // Сбрасываем chromeMode — каждый новый fast-app должен заявить
         // свой режим явно через manifest после loadBundle.
         chromeMode = .compact
+        // Новый URL → старый runtime stale, выкидываем. ARC освободит engine.
+        // (Если url тот же — runtime ниже не создаётся заново, FastAppHost
+        // reuse'ит existing instance.)
+        if currentURL != url {
+            runtime = nil
+        }
 
         // Direction для slide-анимации. goBack() поднимает свой флаг и сам
         // выставляет .back до вызова commit().

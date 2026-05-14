@@ -55,7 +55,7 @@ private struct SuggestionRow: View {
     let onTap: () -> Void
 
     private var host: String {
-        URL(string: entry.url)?.host ?? entry.url
+        URL(string: entry.url)?.hostForDisplay ?? entry.url
     }
 
     private var displayTitle: String {

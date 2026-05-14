@@ -15,6 +15,9 @@ struct AddressBar: View {
     @Bindable var tab: TabModel
     @Binding var isFocused: Bool
     var onOpenLibrary: () -> Void = {}
+    /// Compact-pill tap callback: вместо разворачивания строки в полную
+    /// шелл открывает StartSheet с табами + поиском внизу.
+    var onTapCompactPill: () -> Void = {}
     var isCompact: Bool = false
 
     private var renderCompact: Bool { isCompact && !isFocused }
@@ -24,11 +27,8 @@ struct AddressBar: View {
 
     private var hostText: String {
         if isHome { return "Search or ask anything…" }
-        if let host = tab.currentURL?.host {
-            if tab.currentURL?.scheme == "lumen" { return "lumen://\(host)" }
-            return host
-        }
-        return "Search or ask anything…"
+        guard let url = tab.currentURL else { return "Search or ask anything…" }
+        return url.hostForDisplay
     }
 
     private var leadingGlyph: String? {
@@ -66,10 +66,10 @@ struct AddressBar: View {
 
     private var compactPill: some View {
         Button {
-            // Pre-seed input текущим URL'ом; UITextField сам выделит всё на
-            // didBeginEditing → typing перетирает.
-            if hasURL { tab.addressInput = tab.currentURL?.absoluteString ?? "" }
-            isFocused = true
+            // Tap по compact-pill теперь открывает StartSheet (overlay с
+            // tabs + search), а не разворачивает в полный bar. Старый
+            // full-mode остаётся для домашней страницы / web-режима.
+            onTapCompactPill()
         } label: {
             ZStack {
                 Image(systemName: leadingGlyph ?? "magnifyingglass")

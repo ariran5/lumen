@@ -53,13 +53,18 @@ extension JSEngine {
 
         // navigate(url) — навигация СВОЕЙ табы (не открывает новую).
         // Используется встроенным lumen://home для пинов / recent клика.
+        // Fallback на activeTab нужен для embedded'ового sheet home —
+        // там JSEngine принадлежит SheetHome.tab, который НЕ в
+        // TabsStore.shared.tabs (это отдельный шелл-only TabModel),
+        // и user'овский клик по пину должен навигировать ту таб'у
+        // под sheet'ом, на которую юзер смотрит.
         let navigate: @convention(block) (String) -> Void = { url in
             MainActor.assumeIsolated {
-                guard let tab = TabsStore.shared.tabs.first(where: { $0.id.uuidString == ownIDString }) else {
-                    return
-                }
-                tab.addressInput = url
-                tab.commit()
+                let target = TabsStore.shared.tabs.first(where: { $0.id.uuidString == ownIDString })
+                          ?? TabsStore.shared.activeTab
+                guard let target else { return }
+                target.addressInput = url
+                target.commit()
             }
         }
         tabsNS.setObject(navigate, forKeyedSubscript: "navigate" as NSString)

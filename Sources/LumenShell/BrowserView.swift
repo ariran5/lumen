@@ -3,6 +3,7 @@ import SwiftUI
 public struct BrowserView: View {
     @State private var tabs = TabsStore.shared
     @State private var isAddressFocused: Bool = false
+    @State private var isStartSheetPresented: Bool = false
 
     // Interactive swipe-from-edge state. Палец двигает текущий контент вправо,
     // на release: если за порогом — анимируем дальше и `goBack()`; иначе
@@ -66,6 +67,12 @@ public struct BrowserView: View {
         }
         .background(DarkPalette.bg0.ignoresSafeArea())
         .preferredColorScheme(.dark)
+        .sheet(isPresented: $isStartSheetPresented) {
+            StartSheet(tabs: tabs, isPresented: $isStartSheetPresented)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .presentationBackgroundInteraction(.disabled)
+        }
     }
 
     @ViewBuilder
@@ -86,6 +93,7 @@ public struct BrowserView: View {
                 AddressBar(tab: active,
                            isFocused: $isAddressFocused,
                            onOpenLibrary: openLibrary,
+                           onTapCompactPill: { isStartSheetPresented = true },
                            isCompact: isCompactChrome)
                     .onAppear(perform: applyLaunchURLIfPresent)
                     .frame(maxWidth: isCompactChrome ? 46 : .infinity, alignment: .center)
@@ -163,15 +171,9 @@ private struct TabContent: View {
                 WebTabView(tab: tab)
                     .ignoresSafeArea()
             case .fastApp(let url):
-                FastAppHost(url: url, tabID: tab.id,
-                            onBundleName: { name in
-                                tab.pageTitle = name
-                            },
-                            onChromeMode: { mode in
-                                tab.chromeMode = mode
-                            })
-                .id(url.absoluteString)
-                .ignoresSafeArea()
+                FastAppHost(tab: tab, url: url)
+                    .id(url.absoluteString)
+                    .ignoresSafeArea()
             }
         }
     }

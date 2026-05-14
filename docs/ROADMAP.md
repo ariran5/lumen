@@ -62,6 +62,12 @@
 | **P9.C — Tier 2 / local notifications + deep links** | `lumen.notifications.{requestPermission,schedule,cancel,cancelAll,onTap}` (UNUserNotificationCenter), `lumen.linking.onIncoming.subscribe(fn)` (SwiftUI `.onOpenURL` → `IncomingURLStore` → NativeNotifier), `lumen://` URL scheme в Info.plist | PlatformLab Notifications / DeepLink карточки работают на устройстве ✓ |
 | **P10.A — Tier 3.A / document picker + fetch binary I/O** | `lumen.documentPicker.pick({types,multiple}) → Promise<PickedDocument[] \| null>` (UIDocumentPickerViewController + security-scoped resource + tmp copy); `fetch()` поддерживает `Response.arrayBuffer()` и ArrayBuffer/TypedArray body через JSC C-API (`MakeArrayBufferWithBytesNoCopy` + malloc/free deallocator) | PlatformLab DocumentPickerCard с type-aware preview работает на устройстве ✓ |
 | **P10.B — Sandbox foundation (Block 1)** | `Origin` value type (scheme+host+port, default-port нормализация, shortHash); `OriginContext` + Registry per-origin persistent state (storage prefix, Keychain service, FS roots); `JSEngine.init(origin:)` обязательный; `lumen.storage` / `lumen.secureStorage` namespacing per origin; `LumenManifest` расширен опциональными `permissions` / `connect` / `storage_quota` | Invisible refactor; single-app продолжает работать ✓ |
+| **P10.C — Sandbox Block 2 / Network policy** | `connect` allowlist enforcement в fetch + WebSocket bridges; implicit allow для своего host + поддоменов + любых портов; cross-origin redirect блокируется если target не в `connect` | Commit `89d79ea` ✓ |
+| **iOS 26 bottom sheet polish + reactivity flicker fix** | Sheet content рендерится один раз на medium-bounds; reconcile для same-id узлов пропускает re-apply визуальных стилей (sibling slot rebuild больше не fight'ит per-prop patch'и → tab-bar flicker fixed); 13 ReactivityTests | Commit `0141cdb` ✓ |
+| **P10.D — Sandbox Block 3 / Permission system** | `Capability` (.notifications/.biometric/.camera/.microphone/.photos/.location/.contacts), `Grant` (.granted/.denied/.prompt); `PermissionStore` (UserDefaults, per-origin sticky); `PermissionPrompt` (UIAlertController через TopViewController); `lumen.permissions.{status,request,revoke}`; gate'нуты notifications/biometric/imagePicker bridges; 10 PermissionTests | Commit `4910dc7` ✓ |
+| **P10.E — Sandbox Block 4 / HTTPS-only** | `SecurityPolicy.denyReason` — HTTPS/lumen allow, HTTP только для localhost / 127.x / *.local / RFC1918 ranges; Developer Mode toggle (UserDefaults flag) полностью отключает gate; `BundleLoader.load` бросает `BundleLoadError.insecureScheme` до network'а; 9 SecurityPolicyTests | Commit `b8a6f93` ✓ |
+| **P10.F — Sandbox Block 5 / Storage quotas** | `StorageQuota.parse` ("100MB"/"1GB"/raw bytes, hardMax 1GB); `currentUsage` (UTF-8 bytes по UserDefaults prefix); `denyReason` (учитывает overwrite); `JSEngine+Storage.set` бросает JS exception при overflow; `OriginContext.storageQuota` из манифеста; 12 StorageQuotaTests | Commit `b8a6f93` ✓ |
+| **P10.G — Sandbox Block 6 / Multi-app shell (partial)** | `TabRuntime` per-tab JSEngine + UIKit host — выживает SwiftUI rebuild'ы при tab switch'е; `TabModel.runtime` владеет, ARC чистит при close; `FastAppHost` reuse'ит существующий runtime; `StartSheet` (favicon-tap → sheet с paged Home/Tabs + bottom search через URLTextField pre-filled + auto-focused); `lumen.tabs.navigate` fallback'ит на activeTab для embedded sheet home; auto-dismiss sheet на смену active URL'а; `URL.hostForDisplay` хелпер — port везде в UI | In-flight (нужны: integrity hash, background-tab pause, settings UI) |
 
 ### Архитектурные решения, зафиксированные по дороге
 
@@ -512,25 +518,33 @@ Use-case появится когда захочется "open any .ts URL anywhe
 
 `Origin` + `OriginContext` + `OriginContextRegistry`; namespacing для `lumen.storage` (UserDefaults prefix) и `lumen.secureStorage` (Keychain service); `LumenManifest` расширен `permissions` / `connect` / `storage_quota` (опциональные, runtime не читает).
 
-### P10.C — Block 2: Network policy (~1 сессия)
+### P10.C — Block 2: Network policy ✓ закрыт (commit `89d79ea`)
 
-`connect` allowlist enforcement в fetch + WebSocket bridges. Implicit allow для своего host + поддоменов + любых портов. PSL подключить (или MVP-матчер). Cross-origin redirect блокируется если target не в `connect`. Wildcard `"*"` allowed с варнингом в шелле.
+`connect` allowlist enforcement в fetch + WebSocket bridges; implicit allow для своего host + поддоменов + любых портов; cross-origin redirect блокируется если target не в `connect`.
 
-### P10.D — Block 3: Permission system (~1-2 сессии)
+### P10.D — Block 3: Permission system ✓ закрыт (session 015 / commit `4910dc7`)
 
-`PermissionStore` (`{origin → {capability → grant}}`); UI prompt («acme.com wants to use camera») через `lumen.alert` или новый dedicated modal; wire к: `notifications`, `biometric`, `camera`, `mic`, `photos`, `location`, `contacts`. Settings page «Clear site data» / «Revoke permission» per origin.
+`Capability` (notifications/biometric/camera/microphone/photos/location/contacts) + `Grant` (granted/denied/prompt) + `PermissionStore` (UserDefaults, sticky per-origin). `PermissionPrompt` — UIAlertController через `TopViewController.find()`, default action = «Don't Allow». `lumen.permissions.{status,request,revoke}` JS API. Gate'ы поверх notifications / biometrics / imagePicker bridges (Lumen prompt идёт ДО OS prompt'а). 10 PermissionTests.
 
-### P10.E — Block 4: HTTPS-only + Developer Mode (~0.5 сессии)
+### P10.E — Block 4: HTTPS-only + Developer Mode ✓ закрыт (session 015 / commit `b8a6f93`)
 
-`BundleLoader` reject'ит http URLs кроме `localhost`/`*.local`/dev-mode. Toggle в шелл-settings. Опционально per-origin override list для preview-доменов.
+`SecurityPolicy.denyReason` allow-list'ит HTTPS / lumen://; HTTP — только localhost / 127.x / *.local / RFC1918. Developer Mode flag (UserDefaults) полностью отключает gate. `BundleLoader.load` бросает `BundleLoadError.insecureScheme` до network request'а. 9 SecurityPolicyTests.
 
-### P10.F — Block 5: Storage quotas (~0.5 сессии)
+### P10.F — Block 5: Storage quotas ✓ закрыт (session 015 / commit `b8a6f93`)
 
-Tracking размера UserDefaults entries per origin (хеш по prefix); 100MB default; throw exception при превышении; manifest `storage_quota` upgrade требует permission prompt.
+`StorageQuota`: parser ("100MB"/"1GB"/raw bytes, capped at 1GB), `currentUsage` (UTF-8 bytes по UserDefaults prefix), `denyReason` (учитывает overwrite — старая запись освобождает свои байты). `JSEngine+Storage.set` бросает JS exception при overflow. `OriginContext.storageQuota` парсится из манифеста. 12 StorageQuotaTests. Default 100MB. Manifest upgrade выше default — пока без UI confirm, защищено `hardMaxBytes=1GB` (TODO: prompt flow в Block 3 enhanced).
 
-### P10.G — Block 6: Multi-app shell (~1-2 сессии)
+### P10.G — Block 6: Multi-app shell ✓ partial (session 016)
 
-`lumen.tabs` registry уже частично есть (TabsStore). Нужны: app loader (fetch манифест → проверить integrity (hash манифеста, опционально `files: {sha256}` для каждого файла) → instantiate JSEngine с правильным Origin); per-tab JSEngine lifecycle; correctly switching between loaded apps (background tab pause? memory budget?).
+`TabRuntime` per-tab JSEngine + UIKit hierarchy — теперь живёт в `TabModel.runtime`, не в SwiftUI Coordinator'е → tab switch не уничтожает engine. ARC чистит когда `TabsStore.close` выкидывает TabModel. `FastAppHost` reuse'ит existing runtime через `TabModel.runtime`.
+
+`StartSheet` (новый): favicon-tap → bottom sheet с paged Home/Tabs (TabView .page style) + прибитой к низу search bar через URLTextField (pre-filled URL'ом активной таб'ы, auto-focused, selectAll). Tabs page — list (switch / close / long-press = edit URL). Home page — embedded `lumen://home` fast-app в persistent `SheetHome.tab`. `lumen.tabs.navigate` fallback'ит на activeTab если ownTabID не найден (для embedded sheet home). Auto-dismiss sheet на смену active URL'а. `URL.hostForDisplay` хелпер — port отображается везде в UI (TabModel.displayTitle, AddressBar, AddressSuggestions, StartSheet).
+
+Не сделано (откладываем в follow-up):
+- Manifest integrity (sha256 для script + опционально `files: {sha256}`)
+- Background-tab pause (timers / animations freeze когда таб неактивна)
+- Settings page: список загруженных apps + clear-site-data + revoke-permissions per origin
+- Memory eviction (LRU): пока tab держится — engine жив, при много табов RAM растёт
 
 ---
 
