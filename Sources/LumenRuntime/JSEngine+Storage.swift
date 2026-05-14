@@ -10,6 +10,10 @@ extension JSEngine {
         // OriginContext; evil.com физически не видит наши ключи — у него
         // свой prefix с другим origin-хешом.
         let prefix = originContext.storagePrefix
+        let originCtx = originContext
+        // Капчурим context для throwJS внутри set — strong, т.к. блок
+        // живёт в JSC и сам keep'ит context'у retained.
+        let ctxRef = context
 
         let get: @convention(block) (String?) -> String? = { key in
             guard let key, !key.isEmpty else { return nil }
@@ -20,6 +24,20 @@ extension JSEngine {
             guard let key, !key.isEmpty else { return }
             let storageKey = prefix + key
             if let value {
+                // Block 5: quota enforcement. Throw'аем JS-exception если
+                // запись превысит limit — апп получит обычный try/catch'абельный
+                // error. Не обрезаем втихую: апп должен явно знать что данные
+                // не сохранены.
+                let limit = MainActor.assumeIsolated { StorageQuota.limit(for: originCtx) }
+                if let reason = StorageQuota.denyReason(prefix: prefix,
+                                                       keyWithPrefix: storageKey,
+                                                       newValue: value,
+                                                       limit: limit) {
+                    if let exc = JSValue(newErrorFromMessage: reason, in: ctxRef) {
+                        ctxRef.exception = exc
+                    }
+                    return
+                }
                 UserDefaults.standard.set(value, forKey: storageKey)
             } else {
                 UserDefaults.standard.removeObject(forKey: storageKey)

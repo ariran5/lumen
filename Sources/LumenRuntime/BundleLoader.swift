@@ -44,6 +44,7 @@ struct LumenBundle: Sendable {
 
 enum BundleLoadError: LocalizedError {
     case invalidRoot
+    case insecureScheme(String)
     case manifestUnavailable(URLResponse?)
     case manifestUnparseable(Error)
     case entryUnavailable(URLResponse?)
@@ -52,6 +53,7 @@ enum BundleLoadError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidRoot: "invalid root URL"
+        case .insecureScheme(let r): r
         case .manifestUnavailable(let r): "manifest fetch failed — \(httpStatus(r))"
         case .manifestUnparseable(let e): "manifest JSON invalid — \(e.localizedDescription)"
         case .entryUnavailable(let r): "entry script fetch failed — \(httpStatus(r))"
@@ -123,6 +125,12 @@ enum BundleLoader {
     static func load(from root: URL) async throws -> LumenBundle {
         if root.scheme == "lumen" {
             return try loadBuiltin(url: root)
+        }
+        // Block 4 gate: HTTPS-only (с исключениями для local dev / Dev Mode).
+        // Прогоняется ДО любого network request'а — даже probe не делаем
+        // по http://untrusted.example.com.
+        if let reason = SecurityPolicy.denyReason(forBundleURL: root) {
+            throw BundleLoadError.insecureScheme(reason)
         }
         let manifestURL = root.appendingPathComponent(".well-known/lumen.json")
         var req = URLRequest(url: manifestURL)

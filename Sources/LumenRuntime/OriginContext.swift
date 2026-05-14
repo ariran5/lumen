@@ -21,8 +21,14 @@ final class OriginContext {
     private(set) var networkPolicy: NetworkPolicy
 
     /// Декларированные манифестом capabilities (для будущего permission UI).
-    /// Сами grants не хранятся здесь — это придёт в Block 3.
+    /// Сами grants не хранятся здесь — они в `PermissionStore` (Block 3).
     private(set) var declaredPermissions: [String] = []
+
+    /// Manifest-declared `storage_quota` распарсенный в bytes. `nil` =
+    /// origin использует `StorageQuota.defaultBytes` (100MB). Capped
+    /// в `StorageQuota.hardMaxBytes` (1GB) — манифест не может попросить
+    /// больше без отдельного permission upgrade flow.
+    private(set) var storageQuota: Int?
 
     init(origin: Origin) {
         self.origin = origin
@@ -35,6 +41,7 @@ final class OriginContext {
     func applyManifest(_ manifest: LumenManifest) {
         self.networkPolicy = NetworkPolicy(origin: origin, manifestConnect: manifest.connect)
         self.declaredPermissions = manifest.permissions ?? []
+        self.storageQuota = StorageQuota.parse(manifest.storageQuota)
     }
 
     /// UserDefaults-префикс. `lumen.storage.<hash>.<userkey>` — старые
