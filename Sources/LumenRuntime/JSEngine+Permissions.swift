@@ -1,14 +1,14 @@
 import Foundation
 @preconcurrency import JavaScriptCore
 
-/// `lumen.permissions.{status, request, revoke}` — управление per-origin
-/// grant'ами. Bridge'и capability-API (camera, notifications, …) внутри
-/// зовут `PermissionStore.request(origin, capability)` напрямую — этот
-/// JS-API существует для случаев когда apps хотят явно показать prompt
-/// перед взаимодействием (i.e. onboarding) или прочитать текущее состояние
-/// чтобы скрыть UI элементы.
+/// `lumen.permissions.{status, request, revoke}` — manage per-origin
+/// grants. Capability-API bridges (camera, notifications, …) internally
+/// call `PermissionStore.request(origin, capability)` directly — this
+/// JS API exists for cases when apps want to explicitly show a prompt
+/// before interaction (i.e. onboarding) or read current state
+/// to hide UI elements.
 ///
-/// Capability'и — строки: `'notifications' | 'biometric' | 'camera' |
+/// Capabilities are strings: `'notifications' | 'biometric' | 'camera' |
 /// 'microphone' | 'photos' | 'location' | 'contacts'`.
 ///
 /// API:
@@ -21,11 +21,11 @@ extension JSEngine {
     func installPermissionsBridge() {
         guard let lumen = context.objectForKeyedSubscript("lumen") else { return }
         let permissions = JSValue(newObjectIn: context)!
-        let originRef = origin  // capture для async closure'ов
+        let originRef = origin  // capture for async closures
 
         let status: @convention(block) (String?) -> String = { rawCap in
             guard let rawCap, let cap = Capability(rawValue: rawCap) else {
-                return "denied"  // неизвестный capability — безопасный default
+                return "denied"  // unknown capability — safe default
             }
             return MainActor.assumeIsolated {
                 PermissionStore.shared.status(origin: originRef, capability: cap).rawValue
@@ -55,8 +55,8 @@ extension JSEngine {
 
         lumen.setObject(permissions, forKeyedSubscript: "permissions" as NSString)
 
-        // Promise-wrapper над _nativeRequest. JS-side чтобы не возиться с
-        // JSPromise C-API в Swift'е.
+        // Promise wrapper over _nativeRequest. JS-side to avoid dealing with
+        // JSPromise C-API in Swift.
         let wrapper = """
         lumen.permissions.request = function (capability) {
           return new Promise(function (resolve, reject) {

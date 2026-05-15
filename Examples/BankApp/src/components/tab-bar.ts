@@ -1,5 +1,5 @@
-// Bottom tab-bar в стиле iOS 26 Liquid Glass. Иконки — text-glyph'ы,
-// label под ними. Active state — accent-tinted pill за иконкой.
+// Bottom tab-bar in iOS 26 Liquid Glass style. Icons are text glyphs,
+// label below. Active state — accent-tinted pill behind the icon.
 
 import { colors, radius, space } from '../lib/colors'
 import { activeTab, TAB_BAR_HEIGHT, type TabKey } from '../state/ui'
@@ -11,10 +11,10 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
-  { key: 'home',    label: 'Home',    icon: '⌂' },
-  { key: 'history', label: 'History', icon: '≡' },
-  { key: 'cards',   label: 'Cards',   icon: '▭' },
-  { key: 'profile', label: 'Profile', icon: '◉' },
+  { key: 'home',    label: 'Главная',  icon: '⌂' },
+  { key: 'history', label: 'История',  icon: '≡' },
+  { key: 'cards',   label: 'Платежи',  icon: '▭' },
+  { key: 'profile', label: 'Ещё',      icon: '◉' },
 ]
 
 export function TabBar(): RenderNode {
@@ -58,10 +58,10 @@ function tabButton(t: TabDef): RenderNode {
       paddingBottom: 4,
       gap: 2,
     },
-    // Pill (видим только для active tab) — sibling Text'у, не parent.
-    // Renderer-баг: thunk на `backgroundColor` контейнера ломает рендер
-    // дочерних Text'ов; obхожу через opacity-thunk на отдельном View,
-    // позиционированном под текстом.
+    // Pill (visible only for the active tab) — a sibling of Text, not its parent.
+    // Renderer bug: a thunk on the container's `backgroundColor` breaks
+    // rendering of child Texts; bypass via an opacity-thunk on a separate View
+    // positioned under the text.
     // View(
     //   {
     //     width: 50, height: 28, borderRadius: 14,

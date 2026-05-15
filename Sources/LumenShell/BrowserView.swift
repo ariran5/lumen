@@ -5,18 +5,18 @@ public struct BrowserView: View {
     @State private var isAddressFocused: Bool = false
     @State private var isStartSheetPresented: Bool = false
 
-    // Interactive swipe-from-edge state. Палец двигает текущий контент вправо,
-    // на release: если за порогом — анимируем дальше и `goBack()`; иначе
-    // spring обратно на 0.
+    // Interactive swipe-from-edge state. Finger drags current content right;
+    // on release: if past threshold, animate further and `goBack()`; otherwise
+    // spring back to 0.
     @State private var swipeOffset: CGFloat = 0
     @State private var isSwiping: Bool = false
 
     public init() {}
 
-    /// Compact mode для chrome. Все случаи кроме home — bar схлопывается
-    /// в маленький disc 46pt с favicon/lock-glyph'ом. Tap → разворачивается
-    /// в полный вид с pre-selected URL'ом. Применимо к fast-app'ам И web —
-    /// контент важнее URL bar'а, контрол всегда на экране для возврата.
+    /// Compact mode for chrome. In every case except home, the bar collapses
+    /// into a small 46pt disc with a favicon/lock-glyph. Tap → expands
+    /// to full view with pre-selected URL. Applies to fast-apps AND web —
+    /// content matters more than the URL bar; the control is always on screen for return.
     private var isCompactChrome: Bool {
         guard !isAddressFocused else { return false }
         guard let tab = tabs.activeTab else { return false }
@@ -25,20 +25,20 @@ public struct BrowserView: View {
 
     private var canSwipeBack: Bool {
         guard let tab = tabs.activeTab else { return false }
-        // Outer edge-swipe работает только если в табе есть URL-стек куда
-        // возвращаться (несколько fast-app'ов или web-страниц подряд).
-        // Иначе жест передаётся внутреннему UINavigationController'у
-        // fast-app'а, чтобы тот поппил свою страницу — без этого на root
-        // fast-app экране свайп уходил в `goHome()` и убивал таб.
+        // Outer edge-swipe only works if the tab has a URL stack to return
+        // to (multiple fast-apps or web pages in a row).
+        // Otherwise the gesture is forwarded to the fast-app's inner
+        // UINavigationController so it can pop its page — without this, on the
+        // root fast-app screen the swipe ran `goHome()` and killed the tab.
         return !tab.urlStack.isEmpty
     }
 
     public var body: some View {
-        // Outer-swipe gesture крепим только когда есть куда back'ать (urlStack
-        // не пустой). На root tab fast-app'а его НЕТ — иначе SwiftUI
-        // DragGesture перехватывает touch'и в полосе x < 30pt даже с
-        // `.including: .subviews`, и tap'ы по элементам у левого края
-        // (например первая иконка bottom tab-bar'а) не доходят до них.
+        // Attach the outer-swipe gesture only when there's somewhere to go back
+        // (urlStack is non-empty). On a fast-app's root tab it's NOT attached —
+        // otherwise SwiftUI DragGesture intercepts touches in the x < 30pt
+        // strip even with `.including: .subviews`, and taps on elements near
+        // the left edge (e.g. the first icon in the bottom tab bar) never reach them.
         if canSwipeBack {
             mainContent.gesture(swipeBackGesture)
         } else {
@@ -48,7 +48,7 @@ public struct BrowserView: View {
 
     private var mainContent: some View {
         ZStack {
-            // ─── content (с offset'ом от interactive swipe) ───
+            // ─── content (with offset from interactive swipe) ───
             ZStack {
                 ForEach(tabs.tabs) { tab in
                     TabContent(tab: tab)
@@ -86,7 +86,7 @@ public struct BrowserView: View {
                         isAddressFocused = false
                     }
                 }
-                // ProgressOverlay (loading indicator) только в full режиме
+                // ProgressOverlay (loading indicator) only in full mode
                 if !isCompactChrome {
                     ProgressOverlay(visible: active.isLoading)
                 }
@@ -106,10 +106,10 @@ public struct BrowserView: View {
         }
     }
 
-    /// Interactive swipe-from-edge: tracking palm-driven offset в реальном
-    /// времени. На release решаем: pop или snap-back.
-    /// Пороги хардкод (220pt / 180pt predicted) — нормально для любого
-    /// iPhone, не нужно знать точную ширину экрана.
+    /// Interactive swipe-from-edge: tracking palm-driven offset in real time.
+    /// On release decide: pop or snap-back.
+    /// Thresholds are hardcoded (220pt / 180pt predicted) — fine for any
+    /// iPhone, no need to know exact screen width.
     private var swipeBackGesture: some Gesture {
         DragGesture(minimumDistance: 6, coordinateSpace: .global)
             .onChanged { v in
@@ -126,7 +126,7 @@ public struct BrowserView: View {
 
                 if shouldPop {
                     withAnimation(.easeOut(duration: 0.22)) {
-                        swipeOffset = 800   // off-screen для любого iPhone
+                        swipeOffset = 800   // off-screen for any iPhone
                     }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
                         tabs.activeTab?.goBack()
@@ -159,10 +159,10 @@ private struct TabContent: View {
     @Bindable var tab: TabModel
 
     var body: some View {
-        // Без SwiftUI .transition — на тяжёлых UIViewRepresentable (FastAppHost
-        // с UINavigationController внутри, WKWebView) встроенные транзишны
-        // дёргают frame во время mount'а и выглядят jerky. Outer-level
-        // interactive swipe в BrowserView сам управляет offset'ом.
+        // No SwiftUI .transition — on heavy UIViewRepresentables (FastAppHost
+        // with UINavigationController inside, WKWebView) built-in transitions
+        // janks the frame during mount and look jerky. Outer-level
+        // interactive swipe in BrowserView manages the offset itself.
         Group {
             switch tab.mode {
             case .start:
@@ -207,17 +207,19 @@ private struct ProgressOverlay: View {
 private struct StartPage: View {
     @Bindable var tab: TabModel
 
+    // Replace 127.0.0.1 with your machine's LAN IP when testing from a
+    // physical device. Default works for the iOS simulator.
     private let exampleApps: [(label: String, url: String)] = [
-        ("Tabs Lab — multi-tab API",   "http://192.168.0.107:8080"),
-        ("HN reader — real-world demo", "http://192.168.0.107:8081"),
-        ("Drag Lab — gestures + spring", "http://192.168.0.107:8082"),
-        ("Glass Lab — iOS 26 Liquid Glass", "http://192.168.0.107:8083"),
-        ("Scroll Lab — scroll + safe-area", "http://192.168.0.107:8084"),
-        ("Input Lab — TextInput",       "http://192.168.0.107:8085"),
-        ("Sheet Lab — bottomSheet",     "http://192.168.0.107:8086"),
-        ("Bank Lab — full app demo",    "http://192.168.0.107:8087"),
-        ("Map Lab — native MKMapView",  "http://192.168.0.107:8088"),
-        ("Platform Lab — Tier 1 device APIs", "http://192.168.0.107:8089"),
+        ("Tabs Lab — multi-tab API",   "http://127.0.0.1:8080"),
+        ("HN reader — real-world demo", "http://127.0.0.1:8081"),
+        ("Drag Lab — gestures + spring", "http://127.0.0.1:8082"),
+        ("Glass Lab — iOS 26 Liquid Glass", "http://127.0.0.1:8083"),
+        ("Scroll Lab — scroll + safe-area", "http://127.0.0.1:8084"),
+        ("Input Lab — TextInput",       "http://127.0.0.1:8085"),
+        ("Sheet Lab — bottomSheet",     "http://127.0.0.1:8086"),
+        ("Bank Lab — full app demo",    "http://127.0.0.1:8087"),
+        ("Map Lab — native MKMapView",  "http://127.0.0.1:8088"),
+        ("Platform Lab — Tier 1 device APIs", "http://127.0.0.1:8089"),
         ("History — built-in fast-app", "lumen://history"),
         ("Hacker News (web fallback)",  "https://news.ycombinator.com"),
     ]

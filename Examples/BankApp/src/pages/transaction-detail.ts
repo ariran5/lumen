@@ -1,10 +1,10 @@
-// Transaction detail. Принимает id, лезет в store через findTransaction.
-// Демонстрирует params-driven page.
+// Transaction detail. Takes an id, hits the store via findTransaction.
+// Demonstrates a params-driven page.
 
 import { Header } from '../components/header'
 import { GlassCard } from '../components/glass-card'
 import { Amount } from '../components/amount'
-import { colors, radius, space } from '../lib/colors'
+import { colors, space } from '../lib/colors'
 import { dateLabel } from '../lib/format'
 import { back } from '../lib/router'
 import { findTransaction } from '../state/transactions'
@@ -41,12 +41,12 @@ function renderDetail(tx: ReturnType<typeof findTransaction>, requestedID: numbe
         paddingRight: space.lg,
         gap: space.xl,
       },
-      // Hero — большая иконка + сумма
+      // Hero — large icon + amount
       View(
         { alignItems: 'center', gap: space.md },
         View(
           {
-            width: 64, height: 64, borderRadius: radius.pill,
+            width: 64, height: 64, borderRadius: 32,
             backgroundColor: colors.surface,
             alignItems: 'center', justifyContent: 'center',
           },
@@ -56,7 +56,7 @@ function renderDetail(tx: ReturnType<typeof findTransaction>, requestedID: numbe
         Text({ fontSize: 14, color: colors.textSecondary }, tx.name),
       ),
 
-      // Meta-карточка
+      // Meta card
       GlassCard(
         {},
         metaRow('Category', tx.category),

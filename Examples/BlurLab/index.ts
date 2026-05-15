@@ -1,6 +1,6 @@
-// GlassLab — sticky Glass-pill поверх скроллящегося разноцветного фона.
-// Pill зафиксирован через position: absolute, скролл двигает stripes под
-// ним → видно как UIGlassEffect реагирует на изменение цвета под собой.
+// GlassLab — sticky Glass-pill over a scrolling multicolor background.
+// Pill is fixed via position: absolute, scroll moves stripes under
+// it → shows how UIGlassEffect reacts to the changing color beneath.
 
 const palette: Color[] = [
   '#F97316', '#10B981', '#3B82F6', '#EC4899', '#FACC15',
@@ -35,8 +35,8 @@ function Stage() {
         Stripe(c, palette[(i + 1) % palette.length]),
       ]),
     ),
-    // Sticky overlay поверх ScrollView — position: absolute не участвует
-    // в column flow родителя, проявляется на screen-coords parent'а.
+    // Sticky overlay over ScrollView — position: absolute doesn't participate
+    // in parent's column flow, shows up on parent's screen-coords.
     View({
       position: 'absolute',
       top: 20, left: 20, right: 20,

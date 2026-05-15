@@ -1,8 +1,8 @@
 import Foundation
 
-/// JS-framework `@lumen/core` — глобально доступен в любом fast-app'е.
-/// Эволюционирует как часть рантайма: разработчик не подключает npm-пакет,
-/// просто пишет `View(...)`, `Text(...)`, `signal(...)`, `mount(...)`.
+/// JS framework `@lumen/core` — globally available in every fast-app.
+/// Evolves as part of the runtime: the developer doesn't add an npm package,
+/// just writes `View(...)`, `Text(...)`, `signal(...)`, `mount(...)`.
 enum CoreFramework {
     static let script: String = #"""
     /* @lumen/core — minimal Flutter-style components + signals */
@@ -12,9 +12,9 @@ enum CoreFramework {
       const pendingEffects = new Set()
       let flushScheduled = false
 
-      // Promise.resolve().then() работает в любом JS engine с Promise.
-      // queueMicrotask теоретически тоже доступен в JSC 12.2+, но Promise
-      // надёжнее как fallback.
+      // Promise.resolve().then() works in any JS engine with Promise.
+      // queueMicrotask is theoretically available in JSC 12.2+ too, but Promise
+      // is more reliable as a fallback.
       const microtask = (typeof queueMicrotask === 'function')
         ? queueMicrotask
         : function (fn) { Promise.resolve().then(fn) }
@@ -59,8 +59,8 @@ enum CoreFramework {
 
       function signal(initial) { return new Signal(initial) }
 
-      // EffectScope (Vapor/Solid-style) — группа effect'ов с общим lifetime.
-      // unmount узла → scope.dispose() → все per-prop effect'ы внутри отдых.
+      // EffectScope (Vapor/Solid-style) — group of effects with a shared lifetime.
+      // unmount node → scope.dispose() → all per-prop effects inside die.
       let currentScope = null
       function EffectScope() {
         this._effects = []
@@ -105,11 +105,11 @@ enum CoreFramework {
 
       function effect(fn) { return new Effect(fn) }
 
-      // untracked(fn) — выполнить fn() БЕЗ подписки текущего effect'а на
-      // signal'ы. Используется для initial-eval thunks в билдерах:
-      // нам нужен start-value чтобы layout посчитался правильно, но
-      // мы НЕ хотим чтобы mount-effect ловил эти signal'ы (иначе любой
-      // signal change запускал бы full mount rerun — обратно к не-Vapor).
+      // untracked(fn) — run fn() WITHOUT subscribing the current effect to
+      // signals. Used for initial-eval thunks in builders:
+      // we need a start value so layout computes correctly, but
+      // we do NOT want the mount-effect to catch these signals (otherwise any
+      // signal change would trigger a full mount rerun — back to non-Vapor).
       function untracked(fn) {
         const prev = currentEffect
         currentEffect = null
@@ -149,13 +149,13 @@ enum CoreFramework {
         }
       }
 
-      // splitStyle делит props на:
-      //   style   — статические значения (применяются один раз)
-      //   bindings — реактивные thunk'и `() => signal.value` (per-prop effects)
+      // splitStyle splits props into:
+      //   style   — static values (applied once)
+      //   bindings — reactive thunks `() => signal.value` (per-prop effects)
       //
-      // Это ядро Vapor-style модели: функция в style-слоте означает «реактивное».
-      // Handler'ы (onTap и co.) исключаются через NON_STYLE — они тоже функции,
-      // но для жестов, не для биндингов.
+      // This is the core of the Vapor-style model: a function in a style slot means "reactive".
+      // Handlers (onTap et al.) are excluded via NON_STYLE — they're functions too,
+      // but for gestures, not bindings.
       function splitStyle(props) {
         if (!props) return {style: {}, bindings: null}
         const style = {}
@@ -167,9 +167,9 @@ enum CoreFramework {
           if (typeof v === 'function') {
             if (!bindings) bindings = []
             bindings.push([k, v])
-            // Initial untracked eval — даёт layout правильный измеритель
-            // для первого рендера. Effect зарегистрируется потом через
-            // registerBindings и будет реагировать на signal-changes.
+            // Initial untracked eval — gives layout the right measurement
+            // for the first render. Effect is registered later via
+            // registerBindings and will react to signal changes.
             try { style[k] = untracked(v) } catch (e) { /* leave undefined */ }
           } else {
             style[k] = v
@@ -181,9 +181,9 @@ enum CoreFramework {
         return splitStyle(props).style
       }
 
-      // Каждый build-вызов получает уникальный id — рендерер индексирует
-      // MountedNode по нему, чтобы JS-side fine-grained effect'ы могли
-      // патчить конкретный CALayer через lumen._patchProp(id, key, value).
+      // Each build call gets a unique id — renderer indexes
+      // MountedNode by it so JS-side fine-grained effects can
+      // patch a specific CALayer via lumen._patchProp(id, key, value).
       let _nextNodeId = 0
       function nextId() { _nextNodeId = (_nextNodeId | 0) + 1; return _nextNodeId }
 
@@ -229,7 +229,7 @@ enum CoreFramework {
           return { type: 'text', id: nextId(), text: String(propsOrText) }
         }
         const props = propsOrText || {}
-        // text-content thunk: Text({...}, () => sig.value) — реактивный text.
+        // text-content thunk: Text({...}, () => sig.value) — reactive text.
         let textThunk = null
         let text = ''
         for (let i = 1; i < arguments.length; i++) {
@@ -357,9 +357,9 @@ enum CoreFramework {
         return node
       }
 
-      // MapView(props) — нативная MKMapView обёртка. region/pins/mapType
-      // — обычные props (можно делать реактивными через thunks как и стиль).
-      // onRegionChange / onPinTap — handler'ы.
+      // MapView(props) — native MKMapView wrapper. region/pins/mapType
+      // — regular props (can be made reactive via thunks like style).
+      // onRegionChange / onPinTap — handlers.
       function MapView(props) {
         const p = props || {}
         const sb = splitStyle(p)
@@ -379,20 +379,20 @@ enum CoreFramework {
         return node
       }
 
-      // Slot(props, thunk) — реактивный flex-контейнер. thunk возвращает
-      // либо одиночный RenderNode, либо массив, либо null/undefined.
-      // Когда сигналы внутри thunk'а меняются, native пересоберёт ТОЛЬКО
-      // детей этого контейнера (минуя mount-rerun всего дерева).
+      // Slot(props, thunk) — reactive flex container. thunk returns
+      // either a single RenderNode, an array, or null/undefined.
+      // When signals inside the thunk change, native rebuilds ONLY
+      // this container's children (bypassing a full mount-rerun).
       //
-      // Аналог <For>/<Show> в Solid и v-for/v-if в Vue Vapor.
+      // Analog of <For>/<Show> in Solid and v-for/v-if in Vue Vapor.
       function Slot(props /* , thunk */) {
         const thunk = arguments[1]
         if (typeof thunk !== 'function') {
           throw new Error('Slot requires a thunk function as second argument')
         }
         const sb = splitStyle(props)
-        // Initial children — untracked eval даёт правильный mount-state,
-        // effect зарегистрируется в registerBindings и будет диффить дальше.
+        // Initial children — untracked eval gives the correct mount state,
+        // effect is registered in registerBindings and will diff from there.
         let initialChildren = []
         try {
           const r = untracked(thunk)
@@ -438,16 +438,16 @@ enum CoreFramework {
       }
 
       // ─────────── animated values ───────────
-      // AnimatedValue — opaque-binding к native-side CALayer.property.
-      // Сам объект не триггерит реактивный re-render: его задача
-      // обходить JS-loop вообще и двигать пиксели на render-сервере.
+      // AnimatedValue — opaque binding to native-side CALayer.property.
+      // The object itself doesn't trigger a reactive re-render: its job
+      // is to bypass the JS loop entirely and move pixels on the render server.
       //
-      // Используется так:
+      // Usage:
       //   const x = animated(0)
-      //   View({transform: {translateX: x}})    // парсер видит __anim, биндит
-      //   x.set(40)                              // мгновенно
+      //   View({transform: {translateX: x}})    // parser sees __anim, binds
+      //   x.set(40)                              // instantly
       //   x.animateTo(0, {duration: 300, easing: 'spring'})
-      //   x.stop()                               // freeze в presentation-точке
+      //   x.stop()                               // freeze at presentation point
       let _animSeq = 0
       function _nextAnimId() {
         _animSeq = (_animSeq | 0) + 1
@@ -484,9 +484,9 @@ enum CoreFramework {
       function animated(initial) { return new AnimatedValue(initial) }
 
       // ─────────── safe area ───────────
-      // Native пушит insets через lumen._updateSafeArea(top, bottom, left, right).
-      // На JS-стороне это signal'ы, поэтому любой компонент который читает
-      // lumen.safeArea.top перерендерится при изменении (rotation, keyboard).
+      // Native pushes insets via lumen._updateSafeArea(top, bottom, left, right).
+      // On the JS side these are signals, so any component reading
+      // lumen.safeArea.top re-renders on change (rotation, keyboard).
       const _saT = signal(0), _saB = signal(0), _saL = signal(0), _saR = signal(0)
       Object.defineProperty(lumen, 'safeArea', {
         value: Object.freeze({
@@ -505,9 +505,9 @@ enum CoreFramework {
       }
 
       // ─────────── app lifecycle ───────────
-      // Native пушит state через lumen._updateAppState(state). Чтение
-      // `lumen.appState` из thunk-prop'а делает узел подписчиком, фастапп
-      // перерисуется при transition'е foreground↔background.
+      // Native pushes state via lumen._updateAppState(state). Reading
+      // `lumen.appState` from a thunk prop makes the node a subscriber, fast-app
+      // re-renders on foreground↔background transition.
       const _appState = signal(typeof lumen._appStateInitial === 'string'
                                ? lumen._appStateInitial : 'active')
       Object.defineProperty(lumen, 'appState', {
@@ -517,8 +517,8 @@ enum CoreFramework {
       lumen._updateAppState = function (s) { _appState.value = String(s) }
 
       // ─────────── appearance ───────────
-      // lumen.appearance.theme → 'dark' | 'light'. Реактивно — UITraitChange
-      // observer на UIWindowScene фаерит при смене системной темы.
+      // lumen.appearance.theme → 'dark' | 'light'. Reactive — UITraitChange
+      // observer on UIWindowScene fires on system theme change.
       const _theme = signal(typeof lumen._themeInitial === 'string'
                             ? lumen._themeInitial : 'light')
       Object.defineProperty(lumen, 'appearance', {
@@ -530,9 +530,9 @@ enum CoreFramework {
       lumen._updateTheme = function (t) { _theme.value = String(t) }
 
       // ─────────── network ───────────
-      // lumen.network.{online, type}. NWPathMonitor пушит обновления;
-      // первый pathUpdate приходит сразу после .start, поэтому initial
-      // ('unknown') живёт миллисекунды.
+      // lumen.network.{online, type}. NWPathMonitor pushes updates;
+      // first pathUpdate arrives right after .start, so the initial
+      // ('unknown') only lives for milliseconds.
       const _netOnline = signal(typeof lumen._networkOnlineInitial === 'boolean'
                                 ? lumen._networkOnlineInitial : true)
       const _netType = signal(typeof lumen._networkTypeInitial === 'string'
@@ -550,8 +550,8 @@ enum CoreFramework {
       }
 
       // ─────────── tabs ───────────
-      // Native bridge выдаёт JSON-строки (Swift 6 Sendable не пропускает
-      // объекты как return type). Здесь оборачиваем в человеческий API.
+      // Native bridge returns JSON strings (Swift 6 Sendable rejects
+      // objects as a return type). Wrap in a human API here.
       if (lumen._tabsRaw) {
         const raw = lumen._tabsRaw
         const parse = function (s) { return (s === 'null' || s == null) ? null : JSON.parse(s) }
@@ -563,8 +563,8 @@ enum CoreFramework {
           navigate: function (url) { if (url != null) raw.navigate(String(url)) },
           close:    function (id)  { raw.close(id == null ? null : String(id)) },
           switch:   function (id)  { raw['switch'](String(id)) },
-          // Push-канал 'tabs': TabsStore через withObservationTracking
-          // фаерит на любое изменение списка/активной/title/loading/URL.
+          // Push channel 'tabs': TabsStore via withObservationTracking
+          // fires on any change to list/active/title/loading/URL.
           subscribe: function (fn) {
             if (!lumen._notify) return function () {}
             const id = lumen._notify._subscribe('tabs', fn)
@@ -574,9 +574,9 @@ enum CoreFramework {
       }
 
       // ─────────── history ───────────
-      // subscribe(fn) → unsubscribe(). Под капотом — generic native push-канал
-      // 'history'. HistoryStore.persist() в Swift делает NativeNotifier.fire,
-      // тот обходит все живые JSEngine'ы и зовёт зарегистрированные callback'и.
+      // subscribe(fn) → unsubscribe(). Under the hood — generic native push channel
+      // 'history'. HistoryStore.persist() in Swift calls NativeNotifier.fire,
+      // which walks all live JSEngines and invokes registered callbacks.
       if (lumen._historyRaw) {
         const raw = lumen._historyRaw
         lumen.history = {
@@ -592,11 +592,11 @@ enum CoreFramework {
       }
 
       // ─────────── notifications ───────────
-      // Native bridge даёт _nativeRequestPermission/_nativeSchedule (Promise-
-      // friendly resolve+reject), cancel/cancelAll, _consumeTaps. Здесь
-      // оборачиваем в человеческий API: requestPermission() и schedule()
-      // возвращают Promise; onTap.subscribe(fn) подписывается на канал
-      // 'notifications.tap' и при срабатывании drain'ит pending tap ids.
+      // Native bridge provides _nativeRequestPermission/_nativeSchedule (Promise-
+      // friendly resolve+reject), cancel/cancelAll, _consumeTaps. Here
+      // we wrap in a human API: requestPermission() and schedule()
+      // return Promises; onTap.subscribe(fn) subscribes to channel
+      // 'notifications.tap' and on fire drains pending tap ids.
       if (lumen.notifications) {
         const native = lumen.notifications
         const cancel = native.cancel
@@ -615,9 +615,9 @@ enum CoreFramework {
           cancel: function (id) { cancel(id == null ? null : String(id)) },
           cancelAll: function () { cancelAll() },
           onTap: {
-            // Cold-launch кейс: юзер тапнул нотификацию пока app убит,
-            // delegate сохраняет id, JS позже подписывается — drain() при
-            // subscribe вычитывает накопившееся.
+            // Cold-launch case: user tapped a notification while app was killed,
+            // delegate stores the id, JS subscribes later — drain() on
+            // subscribe reads accumulated taps.
             subscribe: function (fn) {
               if (!lumen._notify) return function () {}
               function drain() {
@@ -634,9 +634,9 @@ enum CoreFramework {
       }
 
       // ─────────── linking.onIncoming ───────────
-      // Deep-link URLs (lumen://...) приходят через SwiftUI .onOpenURL →
-      // IncomingURLStore. subscribe(fn) подписывается на канал
-      // 'linking.incoming' и при fire drain'ит pending URL'ы.
+      // Deep-link URLs (lumen://...) arrive via SwiftUI .onOpenURL →
+      // IncomingURLStore. subscribe(fn) subscribes to channel
+      // 'linking.incoming' and on fire drains pending URLs.
       if (lumen.linking && lumen.linking._consumePending) {
         const consume = lumen.linking._consumePending
         lumen.linking.onIncoming = {
@@ -655,24 +655,24 @@ enum CoreFramework {
       }
 
       // ─────────── bindings → fine-grained effects ───────────
-      // После lumen.render(tree) проходим по дереву и для каждого binding'а
-      // (реактивного prop'а) создаём per-prop effect. Effect живёт в scope'е
-      // mount'а — при пересоздании mount-effect'а scope dispose'ится.
+      // After lumen.render(tree) we walk the tree and for every binding
+      // (reactive prop) create a per-prop effect. Effect lives in the mount
+      // scope — on mount-effect re-run the scope is disposed.
       //
-      // Один thunk → один effect → один patch вызов в native при изменении
-      // именно тех signal'ов которые этот thunk читает. Это Vapor-style:
-      // mount-effect не реагирует на signal-changes если все reactivity
-      // вынесена в thunks.
-      // nodeScopes — per-id EffectScope. Каждый смонтированный узел владеет
-      // своими effect'ами (per-prop bindings + slot rebuild). Native при
-      // unmount'е (reconcile remove или мьют через _replaceChildren) зовёт
-      // `lumen._disposeNodes([id...])`, мы dispose'им scope этих id'шников
-      // → их effect'ы умирают, утечек нет.
+      // One thunk → one effect → one patch call into native when exactly
+      // the signals this thunk reads change. This is Vapor-style:
+      // mount-effect doesn't react to signal changes if all reactivity
+      // is in thunks.
+      // nodeScopes — per-id EffectScope. Every mounted node owns
+      // its effects (per-prop bindings + slot rebuild). On unmount
+      // native (reconcile remove or mutation via _replaceChildren) calls
+      // `lumen._disposeNodes([id...])`, we dispose scopes of those ids
+      // → their effects die, no leaks.
       //
-      // Slot больше не держит ручной childScope: каждый ребёнок имеет свой
-      // node-scope, и nativу нативный reconcile сам решает кого снести.
-      // Это путь к будущему keyed reuse (тогда _disposeNodes придёт только
-      // на реально удалённых ids).
+      // Slot no longer keeps a manual childScope: each child has its own
+      // node-scope, and native reconcile decides who to remove.
+      // This paves the way for future keyed reuse (then _disposeNodes will only
+      // arrive for actually removed ids).
       const nodeScopes = new Map()
 
       function registerBindings(node) {
@@ -685,8 +685,8 @@ enum CoreFramework {
           return
         }
 
-        // Re-register на тот же id (например slot re-run с теми же ids):
-        // dispose старый scope чтобы effect'ы не дублировались.
+        // Re-register on the same id (e.g. slot re-run with the same ids):
+        // dispose old scope so effects don't duplicate.
         const existing = nodeScopes.get(node.id)
         if (existing) existing.dispose()
 
@@ -714,9 +714,9 @@ enum CoreFramework {
                 ? result.filter(function (x) { return x != null && x !== false && x !== true })
                 : (result != null && result !== false && result !== true ? [result] : [])
               lumen._replaceChildren(id, arr)
-              // Native reconcile удалит старых детей и вернёт нам их ids
-              // через _disposeNodes; scope'ы детей мы регистрируем заново
-              // под current scope этой ноды (slot).
+              // Native reconcile will remove old children and return their ids
+              // via _disposeNodes; we register children scopes again
+              // under the current scope of this node (slot).
               for (let i = 0; i < arr.length; i++) registerBindings(arr[i])
             })
             return
@@ -727,8 +727,8 @@ enum CoreFramework {
         })
       }
 
-      // Native колбэкает сюда после reconcile когда часть mounted-дерева
-      // снесли. Один вызов на батч — дёшево даже на сотнях ids.
+      // Native calls back here after reconcile when part of the mounted tree
+      // was removed. One call per batch — cheap even with hundreds of ids.
       lumen._disposeNodes = function (ids) {
         if (!ids || !ids.length) return
         for (let i = 0; i < ids.length; i++) {
@@ -739,11 +739,11 @@ enum CoreFramework {
       }
 
       // ─────────── mount ───────────
-      // Vapor-mode mount: одно тело effect'а на всю компоненту, внутри
-      // которого scope.run(...) изолирует все per-prop effect'ы. Если
-      // component-функция всё-таки читает .value напрямую (а не через thunks),
-      // mount-effect ре-ранется как в старой модели — но scope cleanups
-      // disposes старые binding'и чтобы не было утечек.
+      // Vapor-mode mount: one effect body for the whole component, inside
+      // which scope.run(...) isolates all per-prop effects. If the
+      // component function still reads .value directly (rather than through thunks),
+      // mount-effect re-runs as in the old model — but scope cleanup
+      // disposes old bindings so there are no leaks.
       function mount(component) {
         let scope = null
         return effect(function () {
@@ -767,7 +767,7 @@ enum CoreFramework {
         mount: mount, animated: animated
       }
 
-      // Глобалы для quick-use без import-семантики
+      // Globals for quick-use without import semantics
       globalThis.signal = signal
       globalThis.computed = computed
       globalThis.effect = effect
@@ -785,7 +785,7 @@ enum CoreFramework {
       globalThis.mount = mount
       globalThis.animated = animated
 
-      // Также через lumen.core для тех кто хочет namespace
+      // Also via lumen.core for those who want the namespace
       lumen.core = exportsObj
       lumen.animated = animated
     })();

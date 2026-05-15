@@ -20,11 +20,11 @@ final class BottomSheetViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        // Прозрачный backgroundColor у нашей VC.view'хи чтобы под content'ом
-        // светилось sheet container's окружение: на iOS 26 это Liquid Glass
-        // material (partial detent) или opaque системный фон (.large detent).
-        // Default UIViewController'а — .systemBackground (dark в dark mode),
-        // что перекрыло бы sheet'овский фон сплошным тёмным.
+        // Transparent backgroundColor on our VC.view so the sheet container's
+        // surroundings show through under content: on iOS 26 it's Liquid Glass
+        // material (partial detent) or opaque system background (.large detent).
+        // Default UIViewController's is .systemBackground (dark in dark mode),
+        // which would override the sheet background with solid dark.
         view.backgroundColor = .clear
 
         let host = UIView()
@@ -45,11 +45,11 @@ final class BottomSheetViewController: UIViewController {
         super.viewDidLayoutSubviews()
         let size = view.bounds.size
         guard size.width > 0, size.height > 0 else { return }
-        // Рендерим ровно ОДИН раз на первом valid bounds. Никаких re-render'ов
-        // при detent change'е — Renderer'овские explicit CALayer positions не
-        // умеют плавно follow'ить sheet morph (получаются snap'ы или
-        // mismatched timing). Content остаётся на своих позициях, sheet
-        // визуально растёт вокруг него.
+        // Render exactly ONCE on the first valid bounds. No re-renders
+        // on detent change — Renderer's explicit CALayer positions can't
+        // smoothly follow the sheet morph (you get snaps or
+        // mismatched timing). Content stays in place, sheet
+        // visually grows around it.
         if lastRenderedSize != .zero { return }
         lastRenderedSize = size
         renderer?.render(content)

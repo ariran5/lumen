@@ -2,11 +2,11 @@ import Foundation
 import JavaScriptCore
 import UIKit
 
-/// `lumen.appearance.theme` — реактивный сигнал темы (`'dark' | 'light'`).
+/// `lumen.appearance.theme` — reactive theme signal (`'dark' | 'light'`).
 ///
-/// Источник правды — `UIWindowScene.traitCollection.userInterfaceStyle`.
-/// На iOS 17+ trait change observer фаерит при смене системной темы
-/// в реальном времени; на старте — читаем текущее значение.
+/// Source of truth — `UIWindowScene.traitCollection.userInterfaceStyle`.
+/// On iOS 17+ trait change observer fires on system theme change
+/// in real time; on startup — read current value.
 extension JSEngine {
     func installAppearanceBridge() {
         guard let lumen = context.objectForKeyedSubscript("lumen") else { return }

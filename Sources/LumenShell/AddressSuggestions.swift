@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Saggestion-панель над AddressBar в фокусе. Источник — HistoryStore,
-/// фильтрация по подстроке в title/url. Tap → commit URL и closes focus.
-/// Пустой query → топ-5 свежих визитов.
+/// Suggestion panel shown above AddressBar when focused. Source — HistoryStore,
+/// filtered by substring in title/url. Tap → commit URL and close focus.
+/// Empty query → top 5 recent visits.
 struct AddressSuggestions: View {
     let query: String
     let onSelect: (String) -> Void
@@ -69,7 +69,7 @@ private struct SuggestionRow: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
-                // mini-avatar с первой буквой хоста
+                // mini-avatar with first letter of host
                 Text(initial)
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(DarkPalette.text)

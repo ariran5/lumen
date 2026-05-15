@@ -1,8 +1,8 @@
-// InputLab — проверка TextInput для будущего shell'а.
+// InputLab — TextInput check for the future shell.
 //
-// Минимальный набор: одиночное поле (имя), URL-поле с onSubmit, password.
-// Шапка показывает live-значения, чтобы видно было что controlled-value
-// работает и onChange приходит на каждом нажатии.
+// Minimal set: single field (name), URL field with onSubmit, password.
+// Header shows live values to confirm that controlled-value
+// works and onChange arrives on every keystroke.
 
 const name = signal('')
 const urlInput = signal('https://')

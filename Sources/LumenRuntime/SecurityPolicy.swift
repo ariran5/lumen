@@ -1,33 +1,33 @@
 import Foundation
 
-/// HTTPS-only gate для fast-app загрузки. Block 4 of Sandbox roadmap.
+/// HTTPS-only gate for fast-app loading. Block 4 of Sandbox roadmap.
 ///
-/// Reasoning: cleartext HTTP'у нельзя доверять content (MITM может
-/// подменить bundle), а fast-app получает доступ к platform API'ям после
-/// permission grant — это сильнее чем web с CSP. Поэтому HTTPS-only.
+/// Reasoning: cleartext HTTP can't be trusted for content (MITM can
+/// swap the bundle), and a fast-app gets access to platform APIs after
+/// permission grant — that's stronger than web with CSP. Hence HTTPS-only.
 ///
-/// Исключения для local dev: `localhost`, `127.0.0.1`, `*.local`,
+/// Exceptions for local dev: `localhost`, `127.0.0.1`, `*.local`,
 /// RFC1918 private nets (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`)
-/// — без них iPhone-к-Mac на одной wifi не подключится к dev-server'у.
+/// — without them iPhone-to-Mac on the same wifi can't reach the dev server.
 ///
-/// Developer Mode флаг (`UserDefaults.lumen.developerMode`) полностью
-/// отключает gate — для отладки preview-доменов с самоподписанными
-/// сертификатами или временных tunnel'ов (ngrok'и обычно https'ом
-/// прикрываются, поэтому редкая нужда).
+/// Developer Mode flag (`UserDefaults.lumen.developerMode`) fully
+/// disables the gate — for debugging preview domains with self-signed
+/// certificates or temporary tunnels (ngrok usually wraps in https,
+/// so it's a rare need).
 enum SecurityPolicy {
 
-    /// Schemes которые мы рассматриваем как «безопасный канал». Всё
-    /// остальное должно пройти через `isHostLocal` либо Developer Mode.
+    /// Schemes we treat as a "secure channel". Everything else
+    /// must pass `isHostLocal` or Developer Mode.
     private static let secureSchemes: Set<String> = ["https", "lumen"]
 
-    /// Проверка перед `BundleLoader.load`. Возвращает nil если URL ok,
-    /// иначе reason'ы которые упадут в error чтобы шелл показал юзеру
-    /// причину «почему не загрузилось».
+    /// Check before `BundleLoader.load`. Returns nil if URL is ok,
+    /// otherwise reasons that fall into the error so the shell shows the user
+    /// why "it didn't load".
     static func denyReason(forBundleURL url: URL) -> String? {
         if let scheme = url.scheme?.lowercased(), secureSchemes.contains(scheme) {
             return nil
         }
-        // http остался — допустимо если local либо Dev Mode.
+        // http remains — allowed if local or Dev Mode.
         if isDeveloperMode { return nil }
         if let host = url.host, isHostLocal(host) { return nil }
         return "insecure scheme — fast-apps must be HTTPS (or local dev / Developer Mode)"
@@ -40,8 +40,8 @@ enum SecurityPolicy {
     private static let developerModeKey = "lumen.developerMode"
 
     /// `localhost`, `127.x`, `*.local` (mDNS/Bonjour), RFC1918 private nets.
-    /// Сюда же попадают типичные dev-IP вида `192.168.0.107` с которыми
-    /// тестим с iPhone на ноутбук в той же wifi.
+    /// LAN addresses like `192.168.x.x` / `10.x.x.x` also fall here, which
+    /// we use to test from iPhone to laptop on the same wifi.
     static func isHostLocal(_ host: String) -> Bool {
         let h = host.lowercased()
         if h == "localhost" { return true }
@@ -49,8 +49,8 @@ enum SecurityPolicy {
         return isPrivateIPv4(h)
     }
 
-    /// Проверяет RFC1918 + loopback. IPv6 пока не покрываем — рисков
-    /// мало (dev на link-local IPv6 редкость).
+    /// Checks RFC1918 + loopback. IPv6 not yet covered — low risk
+    /// (dev on link-local IPv6 is rare).
     private static func isPrivateIPv4(_ host: String) -> Bool {
         let octets = host.split(separator: ".").compactMap { UInt8($0) }
         guard octets.count == 4 else { return false }

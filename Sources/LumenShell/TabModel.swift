@@ -7,18 +7,18 @@ enum TabMode: Equatable {
     case fastApp(URL)
 }
 
-/// Видимость shell URL-chrome'а в табе. Управляется manifest'ом
-/// fast-app'а (поле `chrome` в `.well-known/lumen.json`).
+/// Visibility of the shell URL chrome in a tab. Controlled by the fast-app's
+/// manifest (`chrome` field in `.well-known/lumen.json`).
 enum ChromeMode: String, Equatable {
-    case compact   // default — 46pt disc с favicon
-    case full      // полная адресная строка
-    case hidden    // полностью скрыт (для apps со своим bottom UI)
+    case compact   // default — 46pt disc with favicon
+    case full      // full address bar
+    case hidden    // fully hidden (for apps with their own bottom UI)
 }
 
-/// Направление навигации — определяет анимацию slide-перехода в shell.
+/// Navigation direction — drives the slide-transition animation in the shell.
 enum NavDirection {
-    case forward   // push: вперёд (новая страница из правого края)
-    case back      // pop:  назад (текущая уезжает вправо)
+    case forward   // push: forward (new page from the right edge)
+    case back      // pop:  back (current slides out to the right)
 }
 
 @MainActor
@@ -35,21 +35,21 @@ final class TabModel: Identifiable {
     var canGoBack: Bool = false
     var canGoForward: Bool = false
 
-    /// Per-tab URL стек для outer navigation. `commit()` пушит сюда
-    /// предыдущий URL; `goBack()` поппит. Дом не пушим (он база).
+    /// Per-tab URL stack for outer navigation. `commit()` pushes the previous
+    /// URL here; `goBack()` pops it. Home is not pushed (it's the base).
     private(set) var urlStack: [URL] = []
 
-    /// Per-tab fast-app runtime (JSEngine + UIKit host) — выживает SwiftUI
-    /// rebuild'ы при tab switch'е, поэтому JS state / signals / module
-    /// memory не теряются. Освобождается когда TabsStore.close выбрасывает
-    /// этот TabModel из массива. Лениво создаётся в FastAppHost.
+    /// Per-tab fast-app runtime (JSEngine + UIKit host) — survives SwiftUI
+    /// rebuilds across tab switches, so JS state / signals / module
+    /// memory are not lost. Released when TabsStore.close drops this
+    /// TabModel from the array. Lazily created in FastAppHost.
     @ObservationIgnored var runtime: TabRuntime?
 
-    /// Флаг чтобы `goBack()` не пушил URL обратно в стек при reuse `commit()`.
+    /// Flag so `goBack()` doesn't push the URL back onto the stack when reusing `commit()`.
     private var isBackNavigating: Bool = false
 
-    /// Последнее направление перехода — читается TabContent'ом чтобы выбрать
-    /// asymmetric slide-transition (forward — справа влево, back — наоборот).
+    /// Last transition direction — read by TabContent to pick the
+    /// asymmetric slide-transition (forward — right to left, back — reverse).
     var lastNavDirection: NavDirection = .forward
 
     /// Short display title — fallback chain: pageTitle > host:port > "New Tab".
@@ -74,24 +74,24 @@ final class TabModel: Identifiable {
         }
         guard let url = Self.normalize(addressInput) else { return }
         addressInput = url.absoluteString
-        // Сбрасываем chromeMode — каждый новый fast-app должен заявить
-        // свой режим явно через manifest после loadBundle.
+        // Reset chromeMode — each new fast-app must declare
+        // its mode explicitly via the manifest after loadBundle.
         chromeMode = .compact
-        // Новый URL → старый runtime stale, выкидываем. ARC освободит engine.
-        // (Если url тот же — runtime ниже не создаётся заново, FastAppHost
-        // reuse'ит existing instance.)
+        // New URL → old runtime is stale, drop it. ARC will free the engine.
+        // (If url is the same — the runtime below is not recreated; FastAppHost
+        // reuses the existing instance.)
         if currentURL != url {
             runtime = nil
         }
 
-        // Direction для slide-анимации. goBack() поднимает свой флаг и сам
-        // выставляет .back до вызова commit().
+        // Direction for slide-animation. goBack() raises its own flag and
+        // sets .back before calling commit().
         if !isBackNavigating {
             lastNavDirection = .forward
         }
 
-        // Push текущего URL в стек перед навигацией (если это не back-навигация
-        // и не дубликат). Дом не пушим — он база, к нему всегда возврат.
+        // Push current URL onto the stack before navigating (unless this is back-nav
+        // or a duplicate). Home is not pushed — it's the base, always the return target.
         if !isBackNavigating,
            let current = currentURL,
            current != url,
@@ -100,8 +100,8 @@ final class TabModel: Identifiable {
             urlStack.append(current)
         }
 
-        // Внутренние lumen:// страницы (history, settings, ...) грузим как
-        // fast-app сразу, без probe и без записи в историю.
+        // Internal lumen:// pages (history, settings, ...) load as a
+        // fast-app immediately, without probe and without recording in history.
         if url.scheme == "lumen" {
             mode = .fastApp(url)
             return
@@ -111,7 +111,7 @@ final class TabModel: Identifiable {
 
         let host = url.host ?? url.absoluteString
 
-        // Cache hit — мгновенное решение, без probe-round-trip'а.
+        // Cache hit — instant decision, no probe round-trip.
         if let cached = BundleProbeCache.shared.get(host: host) {
             switch cached {
             case .fastApp: mode = .fastApp(url)
@@ -120,10 +120,10 @@ final class TabModel: Identifiable {
             return
         }
 
-        // Cache miss: priority-probe. Держим старый mode (с прогресс-баром) до
-        // ответа probe или 800мс. Если probe сказал .fastApp — монтируем app
-        // напрямую, никакого JSON-flash через WebView. Иначе → .web (probe
-        // продолжается в фоне и может upgrade до .fastApp когда вернётся).
+        // Cache miss: priority-probe. Keep the old mode (with progress bar) until
+        // probe responds or 800ms. If probe says .fastApp — mount the app
+        // directly, no JSON-flash through WebView. Otherwise → .web (probe
+        // continues in background and may upgrade to .fastApp when it returns).
         isLoading = true
         let target = url
 
@@ -154,7 +154,7 @@ final class TabModel: Identifiable {
         }
     }
 
-    /// true если текущий mode уже указывает на этот URL.
+    /// true if the current mode already points to this URL.
     private func modeMatches(_ url: URL) -> Bool {
         switch mode {
         case .fastApp(let u), .web(let u): return u == url
@@ -169,8 +169,8 @@ final class TabModel: Identifiable {
         urlStack.removeAll()
     }
 
-    /// Pop последнего URL из стека. Если стек пуст — go home. Используется
-    /// edge-swipe жестом для возврата с sub-fast-app'ов на главную.
+    /// Pop the last URL from the stack. If the stack is empty — go home. Used
+    /// by the edge-swipe gesture to return from sub-fast-apps to the main view.
     func goBack() {
         lastNavDirection = .back
         guard let prev = urlStack.popLast() else {

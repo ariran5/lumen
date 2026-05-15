@@ -1,8 +1,8 @@
 // PlatformLab — touch every Tier 1 platform API.
 //
 // Clipboard / Linking / Share / ActionSheet / SecureStorage / ImagePicker / WebSocket.
-// Каждая карточка self-contained: title → status (большой, прямо под заголовком)
-// → action(s). Нет глобального event-feed'а сверху — всё видно в самой карточке.
+// Each card is self-contained: title → status (large, right under the title)
+// → action(s). No global event-feed at the top — everything is visible in the card itself.
 
 const clipboardSeen = signal<string>('—')
 const secretValue = signal<string>('—')
@@ -25,8 +25,8 @@ const pickedDocs = signal<PickedDocument[]>([])
 const docPreview = signal<string>('')
 let wsHandle: WebSocketHandle | null = null
 
-// Подписки на push-каналы native'а. Регистрируем один раз — handle'ы живут
-// до конца жизни фастаппа.
+// Subscriptions to native push-channels. Registered once — handles live
+// for the lifetime of the fastapp.
 lumen.notifications.onTap.subscribe((id) => {
   lastTapped.value = id
   lumen.haptics('success')
@@ -93,7 +93,7 @@ function Header() {
 // ── card chrome ───────────────────────────────────────────────────────
 //
 // Layout: title row → status block (big colored) → action rows.
-// Status block — единственное место где смотреть результат.
+// Status block — the only place to look for the result.
 
 function Card(title: string, statusThunk: () => string, ...rows: Child[]) {
   return View({
@@ -143,10 +143,10 @@ function Row(...children: Child[]) {
   return View({flexDirection: 'row', gap: 8}, ...children)
 }
 
-// ── Заход B / Pull-to-refresh ─────────────────────────────────────────
+// ── Pass B / Pull-to-refresh ──────────────────────────────────────────
 //
-// onRefresh приходит когда юзер дёрнул scroll вниз; нативный спиннер
-// показывается пока `refreshing` true. Имитируем fetch — 1.5s setTimeout.
+// onRefresh fires when the user pulls scroll down; the native spinner
+// shows while `refreshing` is true. We fake a fetch — 1.5s setTimeout.
 
 function handleRefresh(): Promise<void> {
   isRefreshing.value = true
@@ -167,7 +167,7 @@ function RefreshCard() {
   )
 }
 
-// ── Заход B / Biometrics ──────────────────────────────────────────────
+// ── Pass B / Biometrics ───────────────────────────────────────────────
 
 function BiometricsCard() {
   return Card('BIOMETRICS',
@@ -190,7 +190,7 @@ function BiometricsCard() {
   )
 }
 
-// ── Заход B / StatusBar ───────────────────────────────────────────────
+// ── Pass B / StatusBar ────────────────────────────────────────────────
 
 function StatusBarCard() {
   return Card('STATUS BAR',
@@ -223,9 +223,9 @@ function StatusBarCard() {
   )
 }
 
-// ── Заход C / Notifications ───────────────────────────────────────────
+// ── Pass C / Notifications ────────────────────────────────────────────
 //
-// requestPermission → schedule в 5s → tap-listener фиксирует id.
+// requestPermission → schedule in 5s → tap-listener records the id.
 
 function NotificationsCard() {
   return Card('NOTIFICATIONS',
@@ -261,10 +261,10 @@ function NotificationsCard() {
   )
 }
 
-// ── Заход C / Deep links ──────────────────────────────────────────────
+// ── Pass C / Deep links ───────────────────────────────────────────────
 //
-// Регистрируем `lumen://` в Info.plist; в Safari вбей lumen://hello —
-// SwiftUI .onOpenURL ловит и пушит через NativeNotifier на JS-канал.
+// Register `lumen://` in Info.plist; in Safari type lumen://hello —
+// SwiftUI .onOpenURL catches it and pushes via NativeNotifier to the JS channel.
 
 function DeepLinkCard() {
   return Card('DEEP LINK',
@@ -287,8 +287,8 @@ function DeepLinkCard() {
 
 // ── 0a. AppState (Tier 2 — reactive lifecycle) ────────────────────────
 //
-// Status — thunk над lumen.appState. При home/lock/return Vapor-effect
-// перепишет только этот узел.
+// Status — thunk over lumen.appState. On home/lock/return the Vapor-effect
+// will rewrite only this node.
 
 function AppStateCard() {
   return Card('APP STATE',
@@ -466,10 +466,10 @@ function ImagePickerCard() {
 
 // ── 6b. DocumentPicker ────────────────────────────────────────────────
 //
-// UIDocumentPicker — выбор из Files.app / iCloud Drive / Dropbox-like
-// провайдеров. `asCopy: true` — файл копируется в наш sandbox, отдаём
-// fastapp'у local file:// uri (как imagePicker). Дальше `fetch(uri)`
-// читает содержимое — URLSession поддерживает file:// схему прозрачно.
+// UIDocumentPicker — pick from Files.app / iCloud Drive / Dropbox-like
+// providers. `asCopy: true` — file is copied into our sandbox, we hand
+// the fastapp a local file:// uri (like imagePicker). Then `fetch(uri)`
+// reads the contents — URLSession supports the file:// scheme transparently.
 
 function isImage(mime: string | undefined): boolean {
   return !!mime && mime.startsWith('image/')
@@ -480,7 +480,7 @@ function isTextual(mime: string | undefined, name: string): boolean {
                mime === 'application/json' ||
                mime === 'application/xml' ||
                mime === 'application/javascript')) return true
-  // Эвристика по расширению — UTType для md/log/ts/etc даёт public.* без mime.
+  // Extension heuristic — UTType for md/log/ts/etc returns public.* without mime.
   const ext = name.split('.').pop()?.toLowerCase() ?? ''
   return ['md', 'txt', 'log', 'ts', 'tsx', 'js', 'jsx', 'json', 'xml',
           'yml', 'yaml', 'html', 'css', 'csv', 'srt'].includes(ext)
@@ -488,7 +488,7 @@ function isTextual(mime: string | undefined, name: string): boolean {
 
 async function loadPreview(doc: PickedDocument): Promise<void> {
   docPreview.value = ''
-  if (isImage(doc.mime)) return  // картинку рендерим напрямую через Image
+  if (isImage(doc.mime)) return  // images render directly via Image
   if (isTextual(doc.mime, doc.name)) {
     try {
       const r = await fetch(doc.uri)
@@ -499,8 +499,8 @@ async function loadPreview(doc: PickedDocument): Promise<void> {
     }
     return
   }
-  // Бинарное (pdf/zip/audio/etc) — читаем через arrayBuffer и показываем
-  // hex первых 32 байт. Доказательство что bytes действительно у нас в JS.
+  // Binary (pdf/zip/audio/etc) — read via arrayBuffer and show
+  // hex of the first 32 bytes. Proof that the bytes actually reached JS.
   try {
     const r = await fetch(doc.uri)
     const buf = await r.arrayBuffer()
@@ -522,7 +522,7 @@ function DocumentPickerCard() {
       if (ds.length === 1) return `picked: ${ds[0].name} · ${ds[0].size}b`
       return `picked ${ds.length} files`
     },
-    // Список выбранных (compact, до 5 строк).
+    // List of picked items (compact, up to 5 rows).
     Slot({gap: 3}, () => {
       const ds = pickedDocs.value
       if (ds.length === 0) return null
@@ -532,7 +532,7 @@ function DocumentPickerCard() {
           key: `${i}-${d.name}`,
         }, `• ${d.name}  ${d.size}b  ${d.mime ?? '?'}`))
     }),
-    // Preview-блок — фиксированной высоты, содержимое первого файла.
+    // Preview block — fixed height, contents of the first file.
     Slot({
       backgroundColor: '#0B0B0F',
       borderColor: COLORS.border, borderWidth: 1,
@@ -595,7 +595,7 @@ function appendLog(line: string) {
 function WebSocketCard() {
   return Card('WEBSOCKET',
     () => wsStatus.value,
-    // Log block — последние 6 сообщений сверху вниз.
+    // Log block — last 6 messages top-to-bottom.
     View({
       backgroundColor: '#0B0B0F',
       borderColor: COLORS.border, borderWidth: 1,
@@ -646,7 +646,7 @@ function connectOrDisconnect() {
   }
   wsStatus.value = 'connecting…'
   wsLog.value = []
-  wsHandle = lumen.ws('ws://192.168.0.107:9000', {
+  wsHandle = lumen.ws('ws://127.0.0.1:9000', {
     onOpen: () => {
       wsStatus.value = 'connected'
       wsConnected.value = true

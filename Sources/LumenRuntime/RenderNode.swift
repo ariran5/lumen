@@ -9,9 +9,9 @@ struct RenderNode {
 
     var kind: Kind = .view
     var key: String?
-    /// JS-generated id (см. CoreFramework.nextId). Renderer индексирует
-    /// MountedNode по этому id, чтобы fine-grained binding'и со стороны JS
-    /// могли патчить конкретный CALayer через lumen._patchProp.
+    /// JS-generated id (see CoreFramework.nextId). Renderer indexes
+    /// MountedNode by this id so fine-grained bindings from JS side
+    /// can patch a specific CALayer via lumen._patchProp.
     var id: Int?
     var style: ViewStyle = ViewStyle()
     var text: String?
@@ -301,8 +301,8 @@ extension RenderNode {
         return nil
     }
 
-    /// JS-side AnimatedValue сериализуется как `{__anim: id, ...}`.
-    /// Этот хелпер унифицирует: число → (value, nil); animated → (nil, animId).
+    /// JS-side AnimatedValue is serialized as `{__anim: id, ...}`.
+    /// This helper unifies: number → (value, nil); animated → (nil, animId).
     private static func parseAnimOrDouble(_ any: Any?) -> (value: Double?, animId: Int?) {
         if let d = doubleValue(any) { return (d, nil) }
         if let dict = any as? [String: Any] {

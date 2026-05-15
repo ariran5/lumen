@@ -1,29 +1,29 @@
 import os
 import UIKit
 
-/// Long-lived per-tab runtime: JSEngine + UIKit host hierarchy. Живёт пока
-/// существует TabModel-владелец, выживает SwiftUI rebuild'ы при tab
-/// switch'е (контраст с прежним Coordinator'ом, который умирал вместе с
-/// SwiftUI представлением).
+/// Long-lived per-tab runtime: JSEngine + UIKit host hierarchy. Lives as long
+/// as the owning TabModel exists, survives SwiftUI rebuilds across tab
+/// switches (contrast with the old Coordinator which died together with the
+/// SwiftUI representation).
 ///
 /// Multi-app shell:
-///   Tab A ↔ Tab B (switch) — обе TabRuntime живут в своих TabModel'ах,
-///   JS state / signals / module-scope storage остаются на месте у обоих.
-///   Когда юзер закроет tab — TabsStore.close выкидывает TabModel из массива,
-///   ARC дёргает TabRuntime, engine и UIKit-стек освобождаются.
+///   Tab A ↔ Tab B (switch) — both TabRuntimes live in their TabModels,
+///   JS state / signals / module-scope storage stay in place for both.
+///   When the user closes a tab — TabsStore.close drops the TabModel from the array,
+///   ARC releases TabRuntime, engine and UIKit stack are freed.
 ///
 /// Lifecycle:
-///   init → setupEngine → loadIfNeeded (по onLayout) → eval bundle.script
-///   performReload (по WS reload event'у) → пересоздать rootPage + engine,
-///     но с тем же tabID и url
-///   dispose (deinit) → release engine, отключить DevServerClient
+///   init → setupEngine → loadIfNeeded (on onLayout) → eval bundle.script
+///   performReload (on WS reload event) → recreate rootPage + engine,
+///     but with the same tabID and url
+///   dispose (deinit) → release engine, disconnect DevServerClient
 @MainActor
 final class TabRuntime {
     let tabID: UUID
     var url: URL
 
-    /// Callback'и в TabModel — заполняют title и chrome-mode когда bundle
-    /// загрузился. Слабые чтобы избежать retain-cycle TabModel ↔ TabRuntime.
+    /// Callbacks to TabModel — populate title and chrome-mode when the bundle
+    /// has loaded. Weak to avoid the TabModel ↔ TabRuntime retain cycle.
     var onBundleName: ((String) -> Void)?
     var onChromeMode: ((ChromeMode) -> Void)?
 
@@ -56,15 +56,15 @@ final class TabRuntime {
         }
     }
 
-    // deinit nonisolated, поэтому явно `devClient?.disconnect()` (main-actor
-    // method) вызвать нельзя. URLSessionWebSocketTask чистится сам при
-    // dealloc'е DevServerClient'а — task release → URLSession удалит его.
-    // Race с listen-callback'ом безопасен: внутри callback'а `[weak self]`
-    // → guard на nil → no-op.
+    // deinit is nonisolated, so we can't explicitly call `devClient?.disconnect()`
+    // (main-actor method). URLSessionWebSocketTask cleans itself up at
+    // DevServerClient dealloc — task release → URLSession drops it.
+    // Race with the listen callback is safe: inside the callback `[weak self]`
+    // → guard on nil → no-op.
 
-    /// Создать новый JSEngine, поставить все bridges. Вызывается из init
-    /// и из performReload (HMR). При reload'е старый engine выкидывается,
-    /// renderer пересоздаётся.
+    /// Create a new JSEngine and install all bridges. Called from init
+    /// and from performReload (HMR). On reload the old engine is dropped,
+    /// the renderer is recreated.
     func setupEngine() {
         guard let rootRenderer = rootPage.renderer else { return }
         let origin = Origin(url: url) ?? .system
@@ -121,9 +121,9 @@ final class TabRuntime {
     }
 
     private func performReload() {
-        // CALayer-ссылки в AnimationManager привязаны к layer'ам которые
-        // умрут после setViewControllers. Без reset'а id'ы AnimatedValue
-        // пересекутся со stale-записями (новый context стартует с 1).
+        // CALayer references in AnimationManager are bound to layers that
+        // die after setViewControllers. Without reset, AnimatedValue ids
+        // would collide with stale records (a new context starts at 1).
         AnimationManager.shared.reset()
 
         let newRoot = LumenPageViewController(title: nav.topViewController?.title)

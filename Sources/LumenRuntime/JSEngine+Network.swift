@@ -2,18 +2,18 @@ import Foundation
 import JavaScriptCore
 import Network
 
-/// `lumen.network.{online, type}` — реактивный сигнал сетевого состояния.
+/// `lumen.network.{online, type}` — reactive signal of network state.
 ///
 /// `online` — bool, `type` — `'wifi' | 'cellular' | 'wired' | 'other' | 'none'`.
-/// Источник — `NWPathMonitor`, обновления приходят на отдельной очереди
-/// и диспатчатся обратно на main.
+/// Source — `NWPathMonitor`, updates arrive on a separate queue
+/// and are dispatched back to main.
 extension JSEngine {
     func installNetworkBridge() {
         guard let lumen = context.objectForKeyedSubscript("lumen") else { return }
 
-        // Initial — невозможно прочитать NWPathMonitor синхронно.
-        // CoreFramework стартует с (online: true, type: 'unknown') — первый
-        // pathUpdate (приходит сразу после .start) переопределит.
+        // Initial — can't read NWPathMonitor synchronously.
+        // CoreFramework starts with (online: true, type: 'unknown') — first
+        // pathUpdate (arrives right after .start) overrides.
         lumen.setObject(true, forKeyedSubscript: "_networkOnlineInitial" as NSString)
         lumen.setObject("unknown", forKeyedSubscript: "_networkTypeInitial" as NSString)
 

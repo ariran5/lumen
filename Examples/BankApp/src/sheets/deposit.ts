@@ -1,76 +1,208 @@
-// Quick deposit sheet. Маленькая sheet (`height: 'medium'`), 3 пресета +
-// «Custom». Хорошо демонстрирует pattern: chip-style выбор → confirm.
+// Deposit. Analog of T-Bank's "Add money": AmountDisplay on top,
+// pick a deposit source (SBP / card from another bank / cash at an
+// ATM / bank transfer), presets + Keypad, sticky CTA.
 
 import { PillButton } from '../components/pill-button'
+import { SheetShell } from '../components/sheet-shell'
+import { SheetRow } from '../components/sheet-row'
+import { AmountDisplay, rawToCents } from '../components/amount-display'
+import { Keypad, applyKey, applyBackspace } from '../components/keypad'
 import { colors, radius, space } from '../lib/colors'
-import { money } from '../lib/format'
+import { money, moneyShort } from '../lib/format'
 import { receiveDeposit } from '../services/bank-api'
+import { sheetOpen } from '../state/ui'
 
-const PRESETS_CENTS = [100_00, 500_00, 1000_00]
+interface Source {
+  id: string
+  icon: string
+  tint: Color
+  label: string
+  sublabel: string
+  /** Fee in kopecks. 0 — no fee. */
+  feeCents: number
+}
+
+const SOURCES: Source[] = [
+  {
+    id: 'sbp',
+    icon: '⚡',
+    tint: colors.tileTransfer,
+    label: 'Через СБП',
+    sublabel: 'Из другого банка по номеру телефона',
+    feeCents: 0,
+  },
+  {
+    id: 'cardin',
+    icon: '💳',
+    tint: colors.cardBlack,
+    label: 'С карты другого банка',
+    sublabel: 'До 150 000 ₽ в месяц без комиссии',
+    feeCents: 0,
+  },
+  {
+    id: 'cash',
+    icon: '🏧',
+    tint: colors.tileQR,
+    label: 'Наличными в банкомате',
+    sublabel: '3 200+ банкоматов партнёров',
+    feeCents: 0,
+  },
+  {
+    id: 'transfer',
+    icon: '🏛️',
+    tint: colors.tileGov,
+    label: 'Банковским переводом',
+    sublabel: 'Реквизиты для зачисления',
+    feeCents: 0,
+  },
+]
+
+const PRESETS: number[] = [1000_00, 5000_00, 25_000_00]
 
 export function openDepositSheet(): void {
-  const selected = signal<number>(PRESETS_CENTS[1]!)
-  const isSubmitting = signal(false)
+  const raw = signal('5000')
+  const source = signal<Source>(SOURCES[0]!)
+  const submitting = signal(false)
+  const error = signal<string | null>(null)
+
+  const cents = computed<number>(() => rawToCents(raw.value))
+  const canSubmit = computed<boolean>(() => !submitting.value && cents.value > 0)
 
   async function confirm() {
-    isSubmitting.value = true
+    error.value = null
+    submitting.value = true
     try {
-      await receiveDeposit(selected.peek(), 'Quick deposit')
+      await receiveDeposit(cents.peek(), source.peek().label)
       lumen.haptics('success')
-      lumen.alert({ title: 'Deposited', message: money(selected.peek()) + ' added.' })
+      lumen.alert({
+        title: 'Зачислено',
+        message: `${money(cents.peek())} поступили на Tinkoff Black.`,
+      })
+    } catch (e) {
+      error.value = (e as Error).message ?? 'Не удалось пополнить'
+      lumen.haptics('error')
     } finally {
-      isSubmitting.value = false
+      submitting.value = false
     }
   }
 
+  sheetOpen.value = true
   lumen.bottomSheet({
-    height: 'medium',
-    content: View(
+    height: 'large',
+    onClose: () => { sheetOpen.value = false },
+    content: SheetShell(
       {
-        flex: 1,
-        backgroundColor: colors.bg,
-        paddingTop: space.md,
-        paddingBottom: Math.max(lumen.safeArea.bottom, space.lg),
-        paddingLeft: space.lg,
-        paddingRight: space.lg,
-        gap: space.lg,
+        title: 'Пополнить',
+        subtitle: 'На Tinkoff Black ·· 4422',
+        footer: PillButton({
+          label: 'Пополнить',
+          disabled: () => !canSubmit.value,
+          onTap: confirm,
+        }),
       },
-      View({ alignItems: 'center', paddingBottom: space.sm },
-        View({ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border })),
 
-      Text({ fontSize: 22, fontWeight: '800', color: colors.textPrimary }, 'Add money'),
-      Text({ fontSize: 13, color: colors.textSecondary }, 'Mock deposit — instantly credits the demo account.'),
+      AmountDisplay({
+        raw,
+        accent: true,
+        caption: () => {
+          const c = cents.value
+          if (c === 0) return 'Введите сумму пополнения'
+          return source.value.feeCents === 0
+            ? 'Без комиссии'
+            : 'Комиссия ' + moneyShort(source.value.feeCents)
+        },
+      }),
 
+      // Presets
       View(
         { flexDirection: 'row', gap: space.sm },
-        ...PRESETS_CENTS.map(c => presetChip(c, selected)),
+        ...PRESETS.map(c => presetChip(c, raw)),
       ),
 
-      View({ flex: 1 }),
-      PillButton({ label: 'Confirm', disabled: () => isSubmitting.value, onTap: confirm }),
+      // Source
+      View(
+        { gap: space.sm },
+        Text(
+          {
+            fontSize: 11, fontWeight: '700',
+            color: colors.textTertiary,
+            paddingLeft: space.xs, paddingTop: space.xs,
+          },
+          'СПОСОБ ПОПОЛНЕНИЯ',
+        ),
+        Slot({}, () => SheetRow({
+          icon: source.value.icon,
+          iconTint: source.value.tint,
+          label: source.value.label,
+          sublabel: source.value.sublabel,
+          onTap: () => openSourcePicker(source),
+        })),
+      ),
+
+      Slot({}, () => error.value
+        ? errorBlock(error.value)
+        : null,
+      ),
+
+      Keypad({
+        onKey: k => { raw.value = applyKey(raw.peek(), k) },
+        onBackspace: () => { raw.value = applyBackspace(raw.peek()) },
+      }),
     ),
   })
 }
 
-function presetChip(cents: number, sel: Signal<number>): RenderNode {
-  const isActive = () => sel.value === cents
+function presetChip(c: number, raw: Signal<string>): RenderNode {
   return Pressable(
     {
-      flex: 1,
-      onTap: () => { lumen.haptics('light'); sel.value = cents },
-      paddingTop: space.md, paddingBottom: space.md,
-      borderRadius: radius.control,
-      borderWidth: 1,
-      borderColor: () => isActive() ? colors.accent : colors.border,
-      backgroundColor: () => isActive() ? colors.accent + '33' : colors.surface,
-      alignItems: 'center',
-    },
-    Text(
-      {
-        fontSize: 15, fontWeight: '700',
-        color: () => isActive() ? colors.textPrimary : colors.textSecondary,
+      onTap: () => {
+        lumen.haptics('light')
+        raw.value = String(Math.floor(c / 100))
       },
-      money(cents),
-    ),
+      width: 108, height: 44, borderRadius: 22,
+      backgroundColor: colors.surface,
+      borderWidth: 1, borderColor: colors.border,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    Text({ fontSize: 14, fontWeight: '600', color: colors.textSecondary }, moneyShort(c)),
   )
+}
+
+function errorBlock(message: string): RenderNode {
+  return View(
+    {
+      flexDirection: 'row', alignItems: 'center', gap: space.md,
+      backgroundColor: '#2A1518',
+      borderColor: colors.negative,
+      borderWidth: 1,
+      borderRadius: radius.control,
+      paddingTop: space.md, paddingBottom: space.md,
+      paddingLeft: space.md, paddingRight: space.md,
+    },
+    Text({ fontSize: 18 }, '⚠'),
+    Text({ flex: 1, color: colors.negative, fontSize: 13, fontWeight: '600' }, message),
+  )
+}
+
+function openSourcePicker(bind: Signal<Source>): void {
+  lumen.bottomSheet({
+    height: 'medium',
+    content: SheetShell(
+      { title: 'Откуда', subtitle: 'Выберите способ' },
+      View(
+        { gap: space.sm },
+        ...SOURCES.map(s => SheetRow({
+          icon: s.icon,
+          iconTint: s.tint,
+          label: s.label,
+          sublabel: s.sublabel,
+          selected: s.id === bind.peek().id,
+          onTap: () => {
+            bind.value = s
+            lumen.haptics('soft')
+          },
+        })),
+      ),
+    ),
+  })
 }

@@ -2,12 +2,12 @@ import Foundation
 import JavaScriptCore
 import UIKit
 
-/// `lumen.appState` — реактивный сигнал жизненного цикла приложения.
-/// Значения: `'active' | 'inactive' | 'background'`.
+/// `lumen.appState` — reactive signal of app lifecycle.
+/// Values: `'active' | 'inactive' | 'background'`.
 ///
-/// CoreFramework заворачивает в signal — обращение `lumen.appState` из
-/// thunk-prop'а делает узел подписчиком, и фастапп перерисуется при
-/// заходе в фон / выходе из фона.
+/// CoreFramework wraps it as a signal — accessing `lumen.appState` from
+/// a thunk prop makes the node a subscriber, and the fast-app re-renders
+/// on entering/leaving background.
 extension JSEngine {
     func installLifecycleBridge() {
         guard let lumen = context.objectForKeyedSubscript("lumen") else { return }
@@ -63,10 +63,10 @@ extension JSEngine {
     private static var lifecycleAlive: [ObjectIdentifier: LifecycleObservers] = [:]
 }
 
-// JSEngine живёт до конца процесса; observer'ы валидно держать без явного
-// removeObserver. Не делаем deinit — Swift 6 strict concurrency не пускает
-// non-Sendable [NSObjectProtocol] из non-isolated deinit, а городить
-// `@unchecked Sendable` ради идеального тира-дауна не оправдано.
+// JSEngine lives till process end; observers can validly be held without explicit
+// removeObserver. No deinit — Swift 6 strict concurrency won't allow
+// non-Sendable [NSObjectProtocol] from a non-isolated deinit, and hacking
+// `@unchecked Sendable` just for a perfect tear-down isn't worth it.
 @MainActor
 private final class LifecycleObservers {
     var tokens: [NSObjectProtocol] = []

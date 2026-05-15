@@ -1,6 +1,6 @@
-// Transactions store. Список + фильтр + computed-агрегаты.
-// applyDelta из account.ts перенесён сюда же как side-effect добавления
-// транзакции — единый entry-point для мутаций.
+// Transactions store. List + filter + computed aggregates.
+// applyDelta from account.ts is wired in here as a side-effect of adding
+// a transaction — single entry-point for mutations.
 
 import { applyDelta } from './account'
 
@@ -13,23 +13,25 @@ export interface Tx {
   amountCents: number
   /** Unix ms. */
   at: number
-  /** Long-form notes — показываются на detail-странице. */
+  /** Long-form notes — shown on the detail page. */
   note?: string
 }
 
 export type TxFilter = 'all' | 'income' | 'spending'
 
 const seed: Tx[] = [
-  { id: 1,  icon: '☕',  name: 'Blue Bottle',     category: 'Coffee',        amountCents:    -485, at: hoursAgo(2),   note: 'Cortado + croissant' },
-  { id: 2,  icon: '🛒',  name: 'Whole Foods',     category: 'Groceries',     amountCents:   -8240, at: hoursAgo(5) },
-  { id: 3,  icon: '💰',  name: 'Acme Inc',        category: 'Salary',        amountCents:  320000, at: daysAgo(1), note: 'May salary' },
-  { id: 4,  icon: '🎬',  name: 'Netflix',         category: 'Subscriptions', amountCents:   -1299, at: daysAgo(1) },
-  { id: 5,  icon: '🚇',  name: 'Metro',           category: 'Transit',       amountCents:    -275, at: daysAgo(2) },
-  { id: 6,  icon: '🍔',  name: 'Shake Shack',     category: 'Restaurants',   amountCents:   -1840, at: daysAgo(2) },
-  { id: 7,  icon: '⛽',  name: 'Shell Station',   category: 'Fuel',          amountCents:   -6230, at: daysAgo(3) },
-  { id: 8,  icon: '📱',  name: 'AT&T',            category: 'Phone',         amountCents:   -4500, at: daysAgo(4) },
-  { id: 9,  icon: '✈️',  name: 'United Airlines', category: 'Travel',        amountCents:  -42800, at: daysAgo(5), note: 'SFO → JFK, economy' },
-  { id: 10, icon: '🏋️',  name: 'Gym membership',  category: 'Health',        amountCents:   -3900, at: daysAgo(6) },
+  { id: 1,  icon: '☕',  name: 'Skuratov Coffee', category: 'Кафе и рестораны', amountCents:    -32000, at: hoursAgo(2), note: 'Капучино + круассан' },
+  { id: 2,  icon: '🛒',  name: 'Пятёрочка',       category: 'Супермаркеты',     amountCents:   -157900, at: hoursAgo(5) },
+  { id: 3,  icon: '💼',  name: 'Acme LLC',        category: 'Зарплата',         amountCents:  18500000, at: daysAgo(1), note: 'Аванс за май' },
+  { id: 4,  icon: '🎬',  name: 'Кинопоиск',       category: 'Подписки',         amountCents:    -29900, at: daysAgo(1) },
+  { id: 5,  icon: '🚇',  name: 'Метро Москва',    category: 'Транспорт',        amountCents:     -6200, at: daysAgo(2) },
+  { id: 6,  icon: '🍕',  name: 'Додо Пицца',      category: 'Кафе и рестораны', amountCents:    -89000, at: daysAgo(2) },
+  { id: 7,  icon: '⛽',  name: 'Лукойл АЗС',      category: 'Топливо',          amountCents:   -315000, at: daysAgo(3) },
+  { id: 8,  icon: '📱',  name: 'МТС',             category: 'Связь',            amountCents:    -69000, at: daysAgo(4) },
+  { id: 9,  icon: '✈️',  name: 'Аэрофлот',        category: 'Авиабилеты',       amountCents:  -1845000, at: daysAgo(5), note: 'MOW → AER, эконом' },
+  { id: 10, icon: '🏋️',  name: 'World Class',     category: 'Спорт и здоровье', amountCents:   -390000, at: daysAgo(6) },
+  { id: 11, icon: '🛍️',  name: 'Wildberries',     category: 'Маркетплейсы',     amountCents:   -245000, at: daysAgo(7), note: 'Заказ #842130' },
+  { id: 12, icon: '💊',  name: 'Аптека 36.6',     category: 'Аптеки',           amountCents:    -82400, at: daysAgo(8) },
 ]
 
 export const transactions = signal<Tx[]>(seed)
@@ -58,8 +60,8 @@ export const monthIncome = computed<number>(() => {
 })
 
 /**
- * Добавить транзакцию. Side-effect: обновляет balance через account.ts.
- * Это единый entry-point — page'и НЕ мутируют список напрямую.
+ * Add a transaction. Side-effect: updates balance via account.ts.
+ * This is the single entry-point — pages do NOT mutate the list directly.
  */
 export function addTransaction(input: Omit<Tx, 'id' | 'at'> & { at?: number }): Tx {
   const tx: Tx = {

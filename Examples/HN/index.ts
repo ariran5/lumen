@@ -1,10 +1,10 @@
-// HN reader — Vapor-style миграция.
+// HN reader — Vapor-style migration.
 //
-// До: VirtualList(count, render) + visitedRev hack для invalidation.
-//     Каждый visited.set → mount re-run → 30 row rebuilds.
-// После: ScrollView + Slot для списка, per-row opacity thunk, header
-//     counter thunk. visitedRev убран — теперь visited signal,
-//     row подписан только на свой бит через thunk.
+// Before: VirtualList(count, render) + visitedRev hack for invalidation.
+//     Every visited.set → mount re-run → 30 row rebuilds.
+// After: ScrollView + Slot for the list, per-row opacity thunk, header
+//     counter thunk. visitedRev removed — now visited is a signal,
+//     row subscribes only to its own bit via a thunk.
 
 const HN = 'https://hacker-news.firebaseio.com/v0'
 
@@ -22,8 +22,8 @@ interface Story {
 const stories = signal<Story[]>([])
 const placeholder = signal('Fetching top stories…')
 
-// Object а не Set: Set.add мутирует in-place, signal не выстрелит.
-// Запись `{...visited.value, [id]: true}` создаёт новую ссылку → fire.
+// Object, not a Set: Set.add mutates in-place and the signal won't fire.
+// Writing `{...visited.value, [id]: true}` creates a new reference → fire.
 function loadVisited(): {[id: string]: boolean} {
   const out: {[id: string]: boolean} = {}
   for (const k of lumen.storage.keys()) {
@@ -42,9 +42,9 @@ mount(App)
 function App() {
   return View({flex: 1, backgroundColor: '#0F0F12'},
     Header(),
-    // Slot — реактивный switch placeholder ↔ list. Mount-effect
-    // НЕ читает stories.value в body, только thunk; mount запускается
-    // ровно один раз.
+    // Slot — reactive switch placeholder ↔ list. Mount-effect
+    // does NOT read stories.value in the body, only the thunk; mount runs
+    // exactly once.
     Slot({flex: 1},
       () => stories.value.length === 0 ? Placeholder() : List()
     ),
@@ -59,7 +59,7 @@ function Header() {
     gap: 10,
     backgroundColor: '#15151A',
   },
-    // Per-prop thunk: только этот Text патчится когда stories.length меняется.
+    // Per-prop thunk: only this Text gets patched when stories.length changes.
     Text({flex: 1, fontSize: 14, fontWeight: '600', color: '#10B981'},
       () => '✅ HMR live · ' + stories.value.length + ' stories'),
     Pressable({
@@ -85,9 +85,9 @@ function List() {
     flex: 1,
     paddingBottom: lumen.safeArea.bottom,
   },
-    // Slot — реактивный список. Effect срабатывает на stories.value
-    // (load complete). На изменение visited не дёргается — opacity thunk
-    // живёт в Row и подписывается отдельно.
+    // Slot — reactive list. Effect fires on stories.value
+    // (load complete). Doesn't trigger on visited changes — the opacity thunk
+    // lives in Row and subscribes separately.
     Slot({}, () => stories.value.map(Row)),
   )
 }
@@ -101,9 +101,9 @@ function Row(s: Story, i: number) {
     gap: 12,
     height: 88,
     backgroundColor: i % 2 === 0 ? '#15151A' : '#1A1A20',
-    // Per-row opacity thunk: подписан только на visited.value.
+    // Per-row opacity thunk: subscribes only to visited.value.
     // 30 rows × 1 effect = 30 patch calls per visited mutation,
-    // mount/slot НЕ дёргаются.
+    // mount/slot do NOT fire.
     opacity: () => visited.value[s.id] ? 0.55 : 1,
   },
     View({width: 32, height: 32, borderRadius: 8, backgroundColor: '#27272F', padding: 4},

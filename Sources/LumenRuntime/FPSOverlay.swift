@@ -6,7 +6,7 @@ final class RenderMetrics {
     static let shared = RenderMetrics()
 
     private(set) var samples: [Double] = []  // ms per cell render
-    private(set) var totalCount: Int = 0     // монотонный счётчик — для renders/sec
+    private(set) var totalCount: Int = 0     // monotonic counter — for renders/sec
 
     func record(_ ms: Double) {
         samples.append(ms)
@@ -42,8 +42,8 @@ final class RenderMetrics {
         return Stats(avg: avg, p50: p50, p95: sorted[p95Index], p99: sorted[p99Index], max: last, count: sorted.count)
     }
 
-    /// Дешёвая версия для HUD — без сортировки, чтобы тик overlay'а
-    /// сам не стоил ничего во время скролла.
+    /// Cheap version for HUD — no sort, so the overlay tick
+    /// itself costs nothing during scroll.
     struct Quick {
         let totalCount: Int
         let avgRecent: Double  // mean over last N samples
@@ -164,8 +164,8 @@ final class FPSOverlay {
         }
         ema = ema == 0 ? f : (ema * 0.85 + f * 0.15)
 
-        // Renders/sec: дельта totalCount поделённая на dt; даёт прямой ответ
-        // «сколько раз mount-effect прокрутился за последнюю секунду».
+        // Renders/sec: delta of totalCount divided by dt; direct answer to
+        // "how many times the mount-effect ran in the last second".
         let r = RenderMetrics.shared.quickSnapshot()
         let countDelta = max(0, r.totalCount - lastRenderCount)
         lastRenderCount = r.totalCount

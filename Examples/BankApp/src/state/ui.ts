@@ -1,15 +1,15 @@
-// UI-state. Здесь сидит активный таб — он определяет, какая page-фабрика
-// рендерится в main area. Модуль-уровневый signal => `index.ts` подписан
-// через `mount`, переключение происходит без router'а.
+// UI-state. The active tab lives here — it determines which page-factory
+// renders in the main area. Module-level signal => `index.ts` subscribes
+// via `mount`, switching happens without a router.
 
 export type TabKey = 'home' | 'history' | 'cards' | 'profile'
 
 export const activeTab = signal<TabKey>('home')
 
-/** Высота bottom tab-bar'а БЕЗ safe-area (она добавляется отдельно). */
+/** Height of the bottom tab-bar WITHOUT safe-area (added separately). */
 export const TAB_BAR_HEIGHT = 64
 
-/** Прячет TabBar когда открыт bottom-sheet — иначе Glass blur tab-bar'а
- *  показывает sheet проезжающий через его область + sheet на iOS 26 при
- *  .medium detent'е плавает с margins и TabBar торчит снизу из-под sheet'а. */
+/** Hides the TabBar when a bottom-sheet is open — otherwise the tab-bar's Glass blur
+ *  shows the sheet passing through its area + on iOS 26 at the .medium detent
+ *  the sheet floats with margins and the TabBar pokes out from under it. */
 export const sheetOpen = signal<boolean>(false)

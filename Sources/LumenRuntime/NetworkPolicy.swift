@@ -1,35 +1,35 @@
 import Foundation
 
-/// Per-origin allowlist для исходящего сетевого трафика fast-app'а.
-/// Применяется к `fetch`, `lumen.ws`, и редиректам внутри fetch'а.
+/// Per-origin allowlist for the fast-app's outgoing network traffic.
+/// Applied to `fetch`, `lumen.ws`, and redirects inside fetch.
 ///
 /// Default-allow:
-/// - тот же host что у Origin'а + любые поддомены + любой порт.
-///   Пример: app `https://acme.com` может ходить на `https://acme.com`,
+/// - same host as Origin + any subdomain + any port.
+///   Example: app `https://acme.com` can reach `https://acme.com`,
 ///   `https://api.acme.com:8443`, `wss://stream.acme.com`.
 ///
-/// Manifest extends через `connect: [...]`:
-/// - `"foo.com"` — ровно этот host (без поддоменов).
-/// - `"*.cdn.com"` — любой поддомен `cdn.com` (но не сам `cdn.com`).
-///   Симметрично с CSP: explicit wildcard нужен явно.
-/// - `"*"` — allow-all (логируется как warning, UI-warning в shell'е добавим).
+/// Manifest extends via `connect: [...]`:
+/// - `"foo.com"` — exactly this host (no subdomains).
+/// - `"*.cdn.com"` — any subdomain of `cdn.com` (but not `cdn.com` itself).
+///   Symmetric with CSP: explicit wildcard must be explicit.
+/// - `"*"` — allow-all (logged as warning, shell UI warning to be added).
 ///
-/// Что НЕ проверяем здесь (отдельные блоки):
+/// What we do NOT check here (separate blocks):
 /// - HTTPS-only enforcement — Block 4.
 /// - Mixed content (HTTPS app → HTTP target) — Block 4.
 /// - Storage quota / rate limits — Block 5.
-/// - PSL для поддоменов (`*.co.uk` не должен матчиться через `*.uk`).
-///   MVP считает все суффиксы валидными; PSL — followup.
+/// - PSL for subdomains (`*.co.uk` must not match through `*.uk`).
+///   MVP treats all suffixes as valid; PSL is a follow-up.
 struct NetworkPolicy: Sendable {
     let origin: Origin
 
-    /// Точные hosts из манифеста (без `*.` префикса).
+    /// Exact hosts from manifest (without `*.` prefix).
     private let exactHosts: Set<String>
 
-    /// Suffix-патерны из манифеста (для `*.foo.com` хранится `foo.com`).
+    /// Suffix patterns from manifest (for `*.foo.com` stored as `foo.com`).
     private let subdomainSuffixes: [String]
 
-    /// True если в манифесте `connect: ["*"]` — allow-all.
+    /// True if manifest has `connect: ["*"]` — allow-all.
     let allowAll: Bool
 
     init(origin: Origin, manifestConnect: [String]?) {
@@ -49,8 +49,8 @@ struct NetworkPolicy: Sendable {
         self.subdomainSuffixes = suffixes
     }
 
-    /// Проверка перед открытием соединения. `lumen://` origin (встроенные
-    /// страницы shell'а) — никогда не ограничен.
+    /// Check before opening a connection. `lumen://` origin (built-in
+    /// shell pages) — never restricted.
     func allows(url: URL) -> Bool {
         if origin.scheme == "lumen" { return true }
 
@@ -59,13 +59,13 @@ struct NetworkPolicy: Sendable {
             return false
         }
 
-        // Поддерживаемые сетевые схемы. file://, data:, blob: и прочее
-        // в fetch не пускаем — отдельные капабилити при необходимости.
+        // Supported network schemes. file://, data:, blob: and similar
+        // are not allowed in fetch — separate capabilities if needed.
         guard ["http", "https", "ws", "wss"].contains(scheme) else {
             return false
         }
 
-        // Implicit: own host + любые поддомены, любой порт, любая схема.
+        // Implicit: own host + any subdomain, any port, any scheme.
         if hostEqualsOrIsSubdomain(host: host, of: origin.host) {
             return true
         }
@@ -88,19 +88,19 @@ struct NetworkPolicy: Sendable {
 }
 
 extension NetworkPolicy {
-    /// Default policy для свежего OriginContext'а до загрузки манифеста.
-    /// Разрешает только собственный host — fetch до eval(bundle.script)
-    /// теоретически не должен случаться, но default safe.
+    /// Default policy for a fresh OriginContext before manifest is loaded.
+    /// Allows only own host — fetch before eval(bundle.script)
+    /// shouldn't happen in theory, but default safe.
     static func initial(for origin: Origin) -> NetworkPolicy {
         NetworkPolicy(origin: origin, manifestConnect: nil)
     }
 }
 
-/// Per-task delegate для fetch'а. Привязывается к `URLSessionTask.delegate`
-/// (iOS 15+) и блокирует cross-origin редиректы которые не входят в allowlist.
+/// Per-task delegate for fetch. Bound to `URLSessionTask.delegate`
+/// (iOS 15+) and blocks cross-origin redirects not in the allowlist.
 ///
-/// Используется на `URLSession.shared` через task-scoped delegate, чтобы не
-/// плодить per-origin URLSession'ы.
+/// Used on `URLSession.shared` via a task-scoped delegate to avoid
+/// spawning per-origin URLSessions.
 final class NetworkRedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     private let policy: NetworkPolicy
 

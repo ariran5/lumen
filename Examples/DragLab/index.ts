@@ -1,18 +1,18 @@
-// DragLab — все жесты Lumen в одном демо.
+// DragLab — all Lumen gestures in one demo.
 //
-//   • Drag area (Pan) — координаты пальца + шарик через transform
-//   • Tap zones — single tap + long press (double tap пока отключён)
+//   • Drag area (Pan) — finger coords + ball via transform
+//   • Tap zones — single tap + long press (double tap disabled for now)
 //   • Swipe area — left/right/up/down
-//   • Pinch + rotate — двумя пальцами
+//   • Pinch + rotate — two fingers
 
 const ballX = signal(0)
 const ballY = signal(0)
 const panState = signal('—')
 
-// Snap-back ball: AnimatedValue двигается на render-сервере,
-// не дёргает реактивный re-render. На drag-end летит обратно spring'ом
-// в (0,0); если схватить пальцем в полёте — .stop() фиксирует
-// presentation-value и шарик слушается пальца с этого места.
+// Snap-back ball: AnimatedValue moves on the render server,
+// doesn't trigger a reactive re-render. On drag-end it springs back
+// to (0,0); if grabbed mid-flight, .stop() pins the
+// presentation-value and the ball follows the finger from there.
 const snapX = animated(0)
 const snapY = animated(0)
 const snapInFlight = signal(false)
@@ -111,13 +111,13 @@ function SnapArea() {
       borderRadius: 10,
       onPan: (e) => {
         if (e.state === 'start') {
-          // Ловим в полёте: presentation-value становится новой моделью.
+          // Catch mid-flight: presentation-value becomes the new model.
           snapX.stop()
           snapY.stop()
           snapInFlight.value = false
-          // dx/dy от UIPan начинаются с (0,0) на каждый pan, поэтому
-          // запоминаем «откуда» через snapX.current() при start, и в
-          // changed считаем absolute = start + dx.
+          // dx/dy from UIPan start at (0,0) for each pan, so we
+          // remember "where from" via snapX.current() at start, and in
+          // changed we compute absolute = start + dx.
           dragStartX = snapX.current()
           dragStartY = snapY.current()
           snapX.set(dragStartX)

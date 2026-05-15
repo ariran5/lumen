@@ -1,6 +1,6 @@
-// TabsLab — упражнение lumen.tabs.* API. Видно собственную табу (own),
-// активную табу (current), список всех. Кнопки открывают новые табы
-// разных типов + закрывают по id.
+// TabsLab — exercise of the lumen.tabs.* API. Shows the own tab,
+// the active tab (current), and the list of all. Buttons open new tabs
+// of various types + close by id.
 
 const refreshCount = signal(0)
 const refresh = () => { refreshCount.value++ }

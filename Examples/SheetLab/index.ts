@@ -1,5 +1,5 @@
-// SheetLab — четыре варианта lumen.bottomSheet с разной высотой и
-// разной начинкой (Lumen-rendered content внутри native sheet'а).
+// SheetLab — four variants of lumen.bottomSheet with different heights and
+// different content (Lumen-rendered content inside a native sheet).
 
 const lastClosed = signal<string>('—')
 

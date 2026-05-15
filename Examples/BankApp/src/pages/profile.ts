@@ -1,5 +1,5 @@
-// Profile. Account info + demo-кнопка mock deposit (для тестирования
-// реактивности баланса + сцены).
+// Profile. Account info + a demo mock-deposit button (for testing
+// balance reactivity + the scene).
 
 import { Header } from '../components/header'
 import { GlassCard } from '../components/glass-card'
@@ -35,7 +35,7 @@ function renderProfile(): RenderNode {
         { alignItems: 'center', gap: space.md, paddingTop: space.lg, paddingBottom: space.md },
         View(
           {
-            width: 88, height: 88, borderRadius: radius.pill,
+            width: 88, height: 88, borderRadius: 44, // round avatar — half of size
             backgroundColor: colors.accent,
             alignItems: 'center', justifyContent: 'center',
           },
@@ -60,7 +60,7 @@ function renderProfile(): RenderNode {
         settingsRow('Notifications', () => 'Not configured'),
       ),
 
-      // Dev tools — для теста реактивности и подачи денег в demo'ный счёт.
+      // Dev tools — for testing reactivity and feeding money into the demo account.
       GlassCard(
         {},
         Text({ fontSize: 12, color: colors.textTertiary, fontWeight: '600' }, 'DEV'),

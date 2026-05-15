@@ -1,8 +1,8 @@
 import XCTest
 @testable import Lumen
 
-/// Block 5 — per-origin storage quota tracking + enforcement в `lumen.storage`.
-/// Покрываются: parser квоты, usage tracking, denyReason logic.
+/// Block 5 — per-origin storage quota tracking + enforcement in `lumen.storage`.
+/// Covered: quota parser, usage tracking, denyReason logic.
 final class StorageQuotaTests: XCTestCase {
 
     private let testOrigin = Origin(scheme: "https", host: "quota.test.example")
@@ -35,7 +35,7 @@ final class StorageQuotaTests: XCTestCase {
         // case insensitive + whitespace
         XCTAssertEqual(StorageQuota.parse("  100 mb"), 100 * 1024 * 1024)
         XCTAssertEqual(StorageQuota.parse("2gb"), 1 * 1024 * 1024 * 1024,
-                       "2GB capped к hardMax = 1GB")
+                       "2GB capped to hardMax = 1GB")
     }
 
     func testParseAcceptsRawBytes() {
@@ -112,16 +112,16 @@ final class StorageQuotaTests: XCTestCase {
 
     func testDenyReasonAccountsForOverwritingExistingKey() {
         let key = prefix + "k"
-        // Уже занято 100 байт (under tiny limit)
+        // Already 100 bytes used (under tiny limit)
         UserDefaults.standard.set(String(repeating: "y", count: 100), forKey: key)
 
-        // Запись того же ключа значением 90 — освобождаем 10 + key bytes
-        // и добавляем новое: должно влезть.
+        // Writing the same key with value 90 — frees 10 + key bytes
+        // and adds the new value: must fit.
         XCTAssertNil(StorageQuota.denyReason(prefix: prefix,
                                               keyWithPrefix: key,
                                               newValue: String(repeating: "z", count: 90),
                                               limit: 200),
-                     "overwrite не должен дважды считать старую запись")
+                     "overwrite must not double-count the old record")
     }
 
     func testDenyReasonOverflowOnNewKeyEvenIfOldKeyExists() {
@@ -134,6 +134,6 @@ final class StorageQuotaTests: XCTestCase {
                                                  keyWithPrefix: newKey,
                                                  newValue: bigValue,
                                                  limit: 200),
-                       "new key — old не освобождается, лимит exceeded")
+                       "new key — old is not freed, limit exceeded")
     }
 }

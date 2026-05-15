@@ -3,9 +3,9 @@ import JavaScriptCore
 import QuartzCore
 import UIKit
 
-/// Fine-grained patch bridge: применяет одно свойство к одному CALayer
-/// по node-id, без обхода всего дерева. Используется JS-side
-/// per-prop effect'ами (Vapor-style reactivity).
+/// Fine-grained patch bridge: applies one property to one CALayer
+/// by node-id without walking the whole tree. Used by JS-side
+/// per-prop effects (Vapor-style reactivity).
 extension JSEngine {
     func installPatchBridge() {
         guard let lumen = context.objectForKeyedSubscript("lumen") else { return }
@@ -17,10 +17,10 @@ extension JSEngine {
         }
         lumen.setObject(patch, forKeyedSubscript: "_patchProp" as NSString)
 
-        // Slot-thunk вызывает _replaceChildren когда дети контейнера должны
-        // пересобраться. Native находит Renderer'а владельца, мутирует
-        // lastTree, запускает relayout — это пересобирает поддерево, но
-        // НЕ оборачивает re-render всего mount-tree.
+        // Slot-thunk calls _replaceChildren when container's children must
+        // be rebuilt. Native finds the owner Renderer, mutates
+        // lastTree, runs relayout — this rebuilds the subtree but
+        // does NOT trigger re-render of the whole mount tree.
         let replaceChildren: @convention(block) (Int, JSValue) -> Void = { id, childrenJSValue in
             MainActor.assumeIsolated {
                 Self.applyReplaceChildren(id: id, childrenValue: childrenJSValue)
@@ -58,11 +58,11 @@ extension JSEngine {
         CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
 
-        // Per-prop patch — source of truth для динамических визуальных
-        // пропов. Обновляем layer + mount.node.style; lastTree оставляем
-        // в покое — reconcile для same-id узлов пропускает re-apply
-        // визуальных стилей, так что stale lastTree не fight'ится с
-        // patch'ами (см. applyGeometryOnly в Renderer.swift).
+        // Per-prop patch — source of truth for dynamic visual
+        // props. Update layer + mount.node.style; leave lastTree
+        // alone — reconcile for same-id nodes skips re-apply
+        // of visual styles, so stale lastTree doesn't fight with
+        // patches (see applyGeometryOnly in Renderer.swift).
 
         switch key {
         case "opacity":
@@ -103,10 +103,10 @@ extension JSEngine {
 
         case "text":
             if value.isString, let s = value.toString() {
-                // Делегируем Renderer.patchText: обновляет lastTree + relayout.
-                // patchText триггерит reconcile, который через applyGeometryOnly
-                // подхватит изменение текста (frame'ы пересчитаются по новой
-                // длине, layer.string обновится с current style из mount.node).
+                // Delegate to Renderer.patchText: updates lastTree + relayout.
+                // patchText triggers reconcile which via applyGeometryOnly
+                // picks up the text change (frames recompute by new
+                // length, layer.string updates with current style from mount.node).
                 ref.renderer?.patchText(id: id, text: s)
             }
 
@@ -122,8 +122,8 @@ extension JSEngine {
             }
 
         default:
-            // Не критично — неподдерживаемое свойство просто игнорируем.
-            // Можно добавить логирование, но это спамит на 120Hz scroll.
+            // Not critical — unsupported prop is just ignored.
+            // Could add logging but it spams on 120Hz scroll.
             break
         }
     }

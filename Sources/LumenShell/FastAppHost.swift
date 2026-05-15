@@ -1,14 +1,14 @@
 import SwiftUI
 import UIKit
 
-/// SwiftUI обёртка над per-tab fast-app runtime. Сам JSEngine + UIKit
-/// hierarchy живёт в `TabModel.runtime` (TabRuntime) — этот View лишь
-/// прикрепляет/откладывает nav-controller в SwiftUI tree.
+/// SwiftUI wrapper over the per-tab fast-app runtime. The JSEngine + UIKit
+/// hierarchy itself lives in `TabModel.runtime` (TabRuntime) — this View only
+/// attaches/detaches the nav-controller in the SwiftUI tree.
 ///
-/// Multi-tab: при переключении табов SwiftUI выкидывает старый FastAppHost
-/// и создаёт новый для активной таб'ы. makeUIViewController возвращает
-/// runtime.nav того же TabModel'а — UIKit re-parent'ит nav, JSEngine
-/// продолжает работать без перезагрузки.
+/// Multi-tab: when switching tabs SwiftUI discards the old FastAppHost
+/// and creates a new one for the active tab. makeUIViewController returns
+/// runtime.nav of the same TabModel — UIKit re-parents the nav, JSEngine
+/// keeps running without a reload.
 struct FastAppHost: UIViewControllerRepresentable {
     @Bindable var tab: TabModel
     let url: URL
@@ -19,22 +19,22 @@ struct FastAppHost: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UINavigationController, context: Context) {
-        // Engine может быть ещё не подписан на loadIfNeeded если view bounds
-        // на этом шаге уже 0 (rare). loadIfNeeded идемпотентен.
+        // Engine may not yet be subscribed to loadIfNeeded if view bounds
+        // at this step are still 0 (rare). loadIfNeeded is idempotent.
         tab.runtime?.loadIfNeeded()
     }
 
     static func dismantleUIViewController(_ uiViewController: UINavigationController,
                                           coordinator: Void) {
-        // SwiftUI зовёт dismantle когда уносит представление. Сам nav
-        // удерживается из TabModel.runtime — он переживёт этот зов и
-        // вернётся в новом makeUIViewController при возвращении на эту табу.
-        // Дополнительно ничего не нужно: UIKit аккуратно сделает
-        // willMove(toParent: nil) когда родитель уберёт нас из children.
+        // SwiftUI calls dismantle when removing the representation. The nav
+        // itself is retained by TabModel.runtime — it survives this call and
+        // returns in a new makeUIViewController when we come back to this tab.
+        // Nothing else needed: UIKit cleanly does
+        // willMove(toParent: nil) when the parent removes us from children.
     }
 
-    /// Создаёт TabRuntime если у таба его ещё нет. Привязывает callback'и
-    /// обратно в TabModel.
+    /// Creates a TabRuntime if the tab doesn't have one yet. Wires callbacks
+    /// back into TabModel.
     private func ensureRuntime() -> TabRuntime {
         if let existing = tab.runtime, existing.url == url {
             return existing

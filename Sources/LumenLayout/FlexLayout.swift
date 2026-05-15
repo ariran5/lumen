@@ -44,9 +44,9 @@ public struct FlexStyle: Sendable {
     public var padding: FlexInsets = .zero
     public var gap: Double = 0
 
-    // Absolute positioning: ребёнок с position=absolute исключается из flow
-    // родителя, позиционируется через top/right/bottom/left относительно
-    // содержимого parent'а (padding учитывается). Z-order — порядок объявления.
+    // Absolute positioning: a child with position=absolute is excluded from its
+    // parent's flow and positioned via top/right/bottom/left relative to the
+    // parent's content box (padding included). Z-order is declaration order.
     public var position: FlexPosition = .relative
     public var top: Double? = nil
     public var right: Double? = nil
@@ -119,8 +119,8 @@ enum FlexLayoutEngine {
         let mainAvailable = isRow ? contentW : contentH
         let crossAvailable = isRow ? contentH : contentW
 
-        // Absolute children excluded from flow distribution; они получают
-        // отдельный pass с позиционированием через top/right/bottom/left.
+        // Absolute children excluded from flow distribution; they get
+        // a separate pass with positioning via top/right/bottom/left.
         let flowChildren = node.children.enumerated().filter {
             $0.element.style.position == .relative
         }
@@ -151,9 +151,9 @@ enum FlexLayoutEngine {
             } else if cs.flex > 0 {
                 totalFlex += cs.flex
             } else {
-                // Нет ни explicit, ни flex — берём intrinsic размер. Для text
-                // leaf'а это measure callback; для контейнера — bounding box
-                // детей + padding + gap (рекурсивно).
+                // No explicit and no flex — take the intrinsic size. For a text
+                // leaf it's the measure callback; for a container it's the
+                // bounding box of children + padding + gap (recursively).
                 let intrinsic = intrinsicSize(child,
                                               available: CGSize(width: mainAvailable,
                                                                 height: crossAvailable),
@@ -172,7 +172,7 @@ enum FlexLayoutEngine {
                                         height: isRow ? crossAvailable : resolvedMains[i]))
                 resolvedCrosses[i] = clamp(isRow ? m.height : m.width, min: crossMin, max: crossMax)
             } else if !child.children.isEmpty {
-                // Контейнер без explicit cross — измерим intrinsic.
+                // Container without explicit cross — measure intrinsic.
                 let intrinsic = intrinsicSize(child,
                                               available: CGSize(width: mainAvailable,
                                                                 height: crossAvailable),
@@ -196,7 +196,7 @@ enum FlexLayoutEngine {
             }
         }
 
-        // Sum только по flow-детям (absolute не contributes к flow distribution).
+        // Sum only over flow children (absolute doesn't contribute to flow distribution).
         let occupiedMain = flowChildren.reduce(0.0) { $0 + resolvedMains[$1.offset] } + gapsTotal
         let freeMain = max(0, mainAvailable - occupiedMain)
 
@@ -257,8 +257,8 @@ enum FlexLayoutEngine {
             cursor += childMain + spacing
         }
 
-        // Absolute children: позиционируются по top/right/bottom/left
-        // относительно content-box parent'а (т.е. с учётом padding).
+        // Absolute children: positioned via top/right/bottom/left
+        // relative to the parent's content box (i.e. padding-aware).
         for (_, child) in absoluteChildren {
             let cs = child.style
 
@@ -294,7 +294,7 @@ enum FlexLayoutEngine {
                 childHeight = clamp(i.height, min: cs.minHeight, max: cs.maxHeight)
             }
 
-            // Position. left имеет приоритет над right; top — над bottom.
+            // Position. left takes priority over right; top over bottom.
             let xOffset: Double
             if let l = cs.left { xOffset = pad.left + l }
             else if let r = cs.right { xOffset = pad.left + contentW - childWidth - r }
@@ -344,13 +344,13 @@ enum FlexLayoutEngine {
         Swift.min(Swift.max(v, min), max)
     }
 
-    /// Intrinsic (shrink-to-fit) размер узла. Не учитывает `flex` (потому что
-    /// flex — это растяжение в свободном пространстве родителя, а тут мы
-    /// меряем минимально необходимое). Учитывает explicit width/height,
-    /// measure callback (для текста и т.п.), и рекурсивно — детей.
+    /// Intrinsic (shrink-to-fit) size of a node. Does not account for `flex`
+    /// (since flex is stretching within the parent's free space, while here
+    /// we measure the minimum required). Honors explicit width/height,
+    /// measure callback (for text etc.), and recurses over children.
     ///
-    /// `isParentRow` нужен только для clamp по min/max — сам intrinsic
-    /// считается в координатах самого узла, не зависит от ориентации parent.
+    /// `isParentRow` is only used for clamp against min/max — intrinsic itself
+    /// is computed in the node's own coordinates, independent of parent orientation.
     fileprivate static func intrinsicSize(_ node: FlexNode,
                                           available: CGSize,
                                           isParentRow: Bool) -> CGSize {
@@ -363,7 +363,7 @@ enum FlexLayoutEngine {
                                         min: node.style.minHeight,
                                         max: node.style.maxHeight)
 
-        // Leaf: measure callback или 0.
+        // Leaf: measure callback or 0.
         if node.children.isEmpty {
             if let measure = node.measure {
                 let m = measure(available)
@@ -375,7 +375,7 @@ enum FlexLayoutEngine {
             return CGSize(width: explicitW ?? 0, height: explicitH ?? 0)
         }
 
-        // Контейнер: bounding box детей + padding + gaps.
+        // Container: bounding box of children + padding + gaps.
         let pad = node.style.padding
         let isRow = node.style.direction == .row
         let gap = node.style.gap
@@ -388,10 +388,10 @@ enum FlexLayoutEngine {
         var crossMax: Double = 0
         let flowChildren = node.children.filter { $0.style.position == .relative }
         for (i, child) in flowChildren.enumerated() {
-            // flex>0 ребёнок не имеет intrinsic размера в main axis (только
-            // от родителя), но имеет свой cross. Для intrinsic main считаем
-            // 0 — это shrink-to-fit, не grow-to-fill. Absolute дети исключены
-            // целиком — они out-of-flow.
+            // A flex>0 child has no intrinsic size in the main axis (it gets
+            // it from the parent), but does have its own cross. For intrinsic
+            // main we count 0 — this is shrink-to-fit, not grow-to-fill.
+            // Absolute children are excluded entirely — they're out-of-flow.
             let cs = intrinsicSize(child, available: innerAvailable, isParentRow: isRow)
             let childMain = isRow ? cs.width : cs.height
             let childCross = isRow ? cs.height : cs.width

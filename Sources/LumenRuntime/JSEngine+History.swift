@@ -1,11 +1,11 @@
 import Foundation
 import JavaScriptCore
 
-/// `lumen.history.*` API. Доступ к browser-wide HistoryStore из fast-app'ов
-/// (в первую очередь — builtin lumen://history).
+/// `lumen.history.*` API. Access to browser-wide HistoryStore from fast-apps
+/// (primarily — builtin lumen://history).
 ///
-/// Возвращает JSON-строки по тем же причинам что и Tabs bridge: Swift 6
-/// strict concurrency не пропускает `[String: Any]` как Sendable return type.
+/// Returns JSON strings for the same reasons as Tabs bridge: Swift 6
+/// strict concurrency rejects `[String: Any]` as a Sendable return type.
 extension JSEngine {
     func installHistoryBridge() {
         guard let lumen = context.objectForKeyedSubscript("lumen"),

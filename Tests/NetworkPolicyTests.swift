@@ -25,7 +25,7 @@ final class NetworkPolicyTests: XCTestCase {
     }
 
     func test_allowsOwnHostAcrossSchemes() {
-        // wss/ws/http к собственному хосту — пускаем (для WS upgrade'а с того же origin).
+        // wss/ws/http to own host — allowed (for WS upgrade from the same origin).
         let origin = Origin(scheme: "https", host: "acme.com")
         let policy = NetworkPolicy(origin: origin, manifestConnect: nil)
         XCTAssertTrue(policy.allows(url: URL(string: "wss://acme.com/ws")!))
@@ -42,7 +42,7 @@ final class NetworkPolicyTests: XCTestCase {
     }
 
     func test_doesNotAllowReverseSubdomain() {
-        // app `https://api.acme.com` НЕ должен иметь доступ к `acme.com`.
+        // App `https://api.acme.com` must NOT have access to `acme.com`.
         let origin = Origin(scheme: "https", host: "api.acme.com")
         let policy = NetworkPolicy(origin: origin, manifestConnect: nil)
         XCTAssertFalse(policy.allows(url: URL(string: "https://acme.com/")!))
@@ -54,7 +54,7 @@ final class NetworkPolicyTests: XCTestCase {
         let origin = Origin(scheme: "https", host: "acme.com")
         let policy = NetworkPolicy(origin: origin, manifestConnect: ["api.partner.com"])
         XCTAssertTrue(policy.allows(url: URL(string: "https://api.partner.com/x")!))
-        // Exact значит без поддоменов — sub.api.partner.com нельзя.
+        // Exact means no subdomains — sub.api.partner.com is not allowed.
         XCTAssertFalse(policy.allows(url: URL(string: "https://sub.api.partner.com/")!))
     }
 
@@ -63,7 +63,7 @@ final class NetworkPolicyTests: XCTestCase {
         let policy = NetworkPolicy(origin: origin, manifestConnect: ["*.cdn.io"])
         XCTAssertTrue(policy.allows(url: URL(string: "https://a.cdn.io/x")!))
         XCTAssertTrue(policy.allows(url: URL(string: "https://deep.a.cdn.io/x")!))
-        // bare cdn.io НЕ матчится — нужен отдельный entry, как в CSP.
+        // Bare cdn.io does NOT match — needs a separate entry, as in CSP.
         XCTAssertFalse(policy.allows(url: URL(string: "https://cdn.io/x")!))
         XCTAssertFalse(policy.allows(url: URL(string: "https://evilcdn.io/x")!))
     }

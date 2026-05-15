@@ -1,8 +1,8 @@
-// Transactions list. Filter chips (all/income/spending) + полный scroll-список.
+// Transactions list. Filter chips (all/income/spending) + full scroll list.
 
 import { Header } from '../components/header'
 import { TxRow } from '../components/tx-row'
-import { colors, radius, space } from '../lib/colors'
+import { colors, space } from '../lib/colors'
 import { filter, visibleTransactions, type TxFilter } from '../state/transactions'
 import { TAB_BAR_HEIGHT } from '../state/ui'
 
@@ -13,13 +13,13 @@ export function transactionsPage() {
 }
 
 function renderTransactions(): RenderNode {
-  // ВАЖНО: общая форма всех tab-pages: View(Top, ScrollView(...)). Если
-  // index'ы детей расходятся между табами (Home: View+ScrollView;
-  // History раньше: View+View+ScrollView), reconcile видит kind-diff на
-  // том же индексе и пересоздаёт ScrollView UIView. Каждое такое
-  // пересоздание ставит свежий UIView поверх tab-bar'а и ломает
-  // z-порядок до следующего relayout'а. Filter-chips переехали ВНУТРЬ
-  // ScrollView'а как первая «строка».
+  // IMPORTANT: shared shape across all tab-pages: View(Top, ScrollView(...)). If
+  // child indices diverge between tabs (Home: View+ScrollView;
+  // History previously: View+View+ScrollView), reconcile sees a kind-diff at
+  // the same index and recreates the ScrollView UIView. Each such
+  // recreation puts a fresh UIView over the tab-bar and breaks
+  // z-order until the next relayout. Filter-chips moved INSIDE
+  // the ScrollView as the first "row".
   return View(
     { flex: 1, backgroundColor: colors.bg },
 
@@ -32,7 +32,7 @@ function renderTransactions(): RenderNode {
         paddingRight: space.md,
         paddingBottom: TAB_BAR_HEIGHT + Math.max(lumen.safeArea.bottom, space.lg) + space.lg,
       },
-      // Filter chip row (теперь sticky-less заголовок в скролле)
+      // Filter chip row (now a sticky-less header inside the scroll)
       View(
         {
           flexDirection: 'row',
@@ -58,7 +58,7 @@ function filterChip(value: TxFilter, label: string): RenderNode {
       paddingBottom: space.sm,
       paddingLeft: space.md,
       paddingRight: space.md,
-      borderRadius: radius.pill,
+      borderRadius: 16,
       borderWidth: 1,
       backgroundColor: () => filter.value === value ? colors.accent : colors.surface,
       borderColor: () => filter.value === value ? colors.accent : colors.border,

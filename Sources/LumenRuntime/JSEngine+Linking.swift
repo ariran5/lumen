@@ -2,17 +2,17 @@ import Foundation
 import JavaScriptCore
 import UIKit
 
-/// `lumen.linking.open(url)` / `canOpen(url)` — открыть mailto:/tel:/sms:/https:
-/// или любой custom-scheme через `UIApplication.shared.open`.
+/// `lumen.linking.open(url)` / `canOpen(url)` — open mailto:/tel:/sms:/https:
+/// or any custom-scheme via `UIApplication.shared.open`.
 ///
-/// `canOpen` для non-http схем требует `LSApplicationQueriesSchemes` в
-/// Info.plist (mailto/tel/sms/instagram/...). `open` работает без декларации,
-/// просто всегда возвращает success/false по результату.
+/// `canOpen` for non-http schemes requires `LSApplicationQueriesSchemes` in
+/// Info.plist (mailto/tel/sms/instagram/...). `open` works without declaration,
+/// just always returns success/false based on the result.
 ///
-/// `_consumePending` — drain очереди incoming URL'ов (SwiftUI `.onOpenURL` →
-/// `IncomingURLStore.enqueue`). JS-обёртка `linking.onIncoming.subscribe(fn)`
-/// в CoreFramework подписывается на канал `linking.incoming` и при каждом
-/// fire вычитывает накопившиеся URL'ы.
+/// `_consumePending` — drain the incoming URL queue (SwiftUI `.onOpenURL` →
+/// `IncomingURLStore.enqueue`). JS wrapper `linking.onIncoming.subscribe(fn)`
+/// in CoreFramework subscribes to channel `linking.incoming` and on each
+/// fire reads accumulated URLs.
 extension JSEngine {
     func installLinkingBridge() {
         guard let lumen = context.objectForKeyedSubscript("lumen") else { return }

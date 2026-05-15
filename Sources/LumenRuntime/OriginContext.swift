@@ -1,33 +1,33 @@
 import Foundation
 
-/// Per-origin контекст: разделяемое persistent-состояние всех таб одного
-/// сайта. Один app в двух табах — один OriginContext. Закрытие таб'ы
-/// не убивает контекст, пока ссылка хотя бы из одного engine'а живёт.
+/// Per-origin context: shared persistent state of all tabs of a single
+/// site. One app in two tabs — one OriginContext. Closing a tab
+/// doesn't kill the context as long as at least one engine holds a reference.
 ///
-/// Сейчас держит namespace-префиксы для storage / Keychain / FS. Дальше
-/// сюда же сложатся permission-grants, manifest hashes, quota tracking.
+/// Currently holds namespace prefixes for storage / Keychain / FS. Permission
+/// grants, manifest hashes, quota tracking will land here next.
 ///
-/// Получать через `OriginContextRegistry.shared.context(for: origin)` —
-/// дедуплицирует по Origin, чтобы две табы одного сайта шарили
-/// permission-решения и storage пространство.
+/// Obtain via `OriginContextRegistry.shared.context(for: origin)` —
+/// deduplicates by Origin so two tabs of the same site share
+/// permission decisions and storage space.
 @MainActor
 final class OriginContext {
     let origin: Origin
 
-    /// Текущая network policy. До `applyManifest` — `.initial` (allow только
-    /// собственный host + поддомены). После применения манифеста расширяется
-    /// его `connect` списком. Шарится между табами того же origin'а через
-    /// `OriginContextRegistry` — последний загруженный манифест выигрывает.
+    /// Current network policy. Before `applyManifest` — `.initial` (allow only
+    /// own host + subdomains). After manifest is applied, expanded by
+    /// its `connect` list. Shared between tabs of the same origin via
+    /// `OriginContextRegistry` — last loaded manifest wins.
     private(set) var networkPolicy: NetworkPolicy
 
-    /// Декларированные манифестом capabilities (для будущего permission UI).
-    /// Сами grants не хранятся здесь — они в `PermissionStore` (Block 3).
+    /// Capabilities declared by manifest (for future permission UI).
+    /// Grants themselves are not stored here — they live in `PermissionStore` (Block 3).
     private(set) var declaredPermissions: [String] = []
 
-    /// Manifest-declared `storage_quota` распарсенный в bytes. `nil` =
-    /// origin использует `StorageQuota.defaultBytes` (100MB). Capped
-    /// в `StorageQuota.hardMaxBytes` (1GB) — манифест не может попросить
-    /// больше без отдельного permission upgrade flow.
+    /// Manifest-declared `storage_quota` parsed to bytes. `nil` =
+    /// origin uses `StorageQuota.defaultBytes` (100MB). Capped
+    /// at `StorageQuota.hardMaxBytes` (1GB) — a manifest can't ask for
+    /// more without a separate permission upgrade flow.
     private(set) var storageQuota: Int?
 
     init(origin: Origin) {
@@ -35,38 +35,38 @@ final class OriginContext {
         self.networkPolicy = .initial(for: origin)
     }
 
-    /// Применить fresh-loaded манифест. Last-write-wins для всех табов
-    /// данного origin'а. Вызывать ДО eval'а bundle.script'а, чтобы fetch'и
-    /// из user-кода уже видели правильный allowlist.
+    /// Apply a freshly loaded manifest. Last-write-wins for all tabs
+    /// of this origin. Call BEFORE eval'ing bundle.script so fetches
+    /// from user code already see the correct allowlist.
     func applyManifest(_ manifest: LumenManifest) {
         self.networkPolicy = NetworkPolicy(origin: origin, manifestConnect: manifest.connect)
         self.declaredPermissions = manifest.permissions ?? []
         self.storageQuota = StorageQuota.parse(manifest.storageQuota)
     }
 
-    /// UserDefaults-префикс. `lumen.storage.<hash>.<userkey>` — старые
-    /// глобальные ключи `lumen.storage.<key>` после миграции более не видны.
+    /// UserDefaults prefix. `lumen.storage.<hash>.<userkey>` — legacy
+    /// global keys `lumen.storage.<key>` are no longer visible after migration.
     var storagePrefix: String {
         "lumen.storage.\(origin.shortHash)."
     }
 
-    /// Keychain service identifier. Все entries app'а живут под одним
-    /// service'ом — `SecItemDelete` по service'у = wipe'нуть весь secure
-    /// state app'а одним вызовом.
+    /// Keychain service identifier. All app entries live under a single
+    /// service — `SecItemDelete` by service = wipe the entire secure
+    /// state of an app in one call.
     var keychainService: String {
         "com.lumen.secureStorage.\(origin.shortHash)"
     }
 
-    /// Корень FS-песочницы app'а под Documents/. Бридги (imagePicker,
-    /// documentPicker, ...) кладут свои tmp-файлы внутрь.
+    /// Root of the app's FS sandbox under Documents/. Bridges (imagePicker,
+    /// documentPicker, ...) place their tmp files inside.
     var documentsRoot: URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return docs.appendingPathComponent("apps", isDirectory: true)
             .appendingPathComponent(origin.shortHash, isDirectory: true)
     }
 
-    /// Tmp-корень. Можно очищать целиком при logout / clear-site-data
-    /// без потери persistent-данных.
+    /// Tmp root. Can be wiped entirely on logout / clear-site-data
+    /// without losing persistent data.
     var tmpRoot: URL {
         let base = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         return base.appendingPathComponent("apps", isDirectory: true)
@@ -74,9 +74,9 @@ final class OriginContext {
     }
 }
 
-/// Singleton registry, дедуплицирует OriginContext по Origin. Две табы
-/// одного сайта получают один и тот же контекст — permission-грант в
-/// одной видно во второй.
+/// Singleton registry, deduplicates OriginContext by Origin. Two tabs
+/// of the same site get the same context — a permission grant in
+/// one is visible in the other.
 @MainActor
 final class OriginContextRegistry {
     static let shared = OriginContextRegistry()

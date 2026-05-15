@@ -1,19 +1,19 @@
 import Foundation
 import CryptoKit
 
-/// Web-style origin: scheme + host + port. Базовая единица изоляции
-/// между fast-app'ами. Два URL с одинаковым Origin'ом — это один app:
-/// они шарят storage, permissions, FS-корень. Разные Origin — полная
-/// изоляция, как разные сайты в браузере.
+/// Web-style origin: scheme + host + port. Base unit of isolation
+/// between fast-apps. Two URLs with the same Origin are one app:
+/// they share storage, permissions, FS root. Different Origins — full
+/// isolation, like different sites in a browser.
 ///
-/// Порт нормализуется: дефолтный (443 для https, 80 для http) → nil,
-/// чтобы `https://acme.com` и `https://acme.com:443` считались одним
-/// origin'ом.
+/// Port is normalized: default (443 for https, 80 for http) → nil,
+/// so `https://acme.com` and `https://acme.com:443` are considered one
+/// origin.
 ///
-/// Спец-origin'ы:
-/// - `lumen://host/...` → scheme=lumen, host=host, port=nil — для встроенных
-///   shell-страниц (home, settings, history). Каждый lumen-host — свой origin.
-/// - `Origin.system` — для cases когда origin неизвестен (загрузка до init bundle'а).
+/// Special origins:
+/// - `lumen://host/...` → scheme=lumen, host=host, port=nil — for built-in
+///   shell pages (home, settings, history). Each lumen-host is its own origin.
+/// - `Origin.system` — for cases when origin is unknown (loading before init bundle).
 struct Origin: Hashable, Sendable, CustomStringConvertible {
     let scheme: String
     let host: String
@@ -34,7 +34,7 @@ struct Origin: Hashable, Sendable, CustomStringConvertible {
         self.port = Self.normalizePort(url.port, scheme: scheme)
     }
 
-    /// Fallback origin для built-in shell-контекстов без URL.
+    /// Fallback origin for built-in shell contexts without URL.
     static let system = Origin(scheme: "lumen", host: "system", port: nil)
 
     var description: String {
@@ -42,8 +42,8 @@ struct Origin: Hashable, Sendable, CustomStringConvertible {
         return "\(scheme)://\(host)"
     }
 
-    /// Stable short hash (12 hex chars from SHA-256), safe для filesystem
-    /// path'ов, UserDefaults-ключей, Keychain service identifiers.
+    /// Stable short hash (12 hex chars from SHA-256), safe for filesystem
+    /// paths, UserDefaults keys, Keychain service identifiers.
     var shortHash: String {
         let canonical = description
         let digest = SHA256.hash(data: Data(canonical.utf8))

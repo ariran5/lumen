@@ -1,13 +1,13 @@
-// Map Lab — нативный MKMapView через мост.
+// Map Lab — native MKMapView through the bridge.
 //
-// Демонстрирует:
-//  • <MapView/> с region, pins, mapType — обычные props
-//  • onRegionChange — JS callback из MKMapViewDelegate
-//  • onPinTap → bottomSheet (cross-bridge композиция)
-//  • mapType переключается chip'ами, регион/пины — signal'ы
+// Demonstrates:
+//  • <MapView/> with region, pins, mapType — plain props
+//  • onRegionChange — JS callback from MKMapViewDelegate
+//  • onPinTap → bottomSheet (cross-bridge composition)
+//  • mapType is toggled via chips, region/pins are signals
 //
-// Хук в нативку с обеих сторон: Swift делает SetRegion/addAnnotation,
-// нам обратно прилетают coordinate-события.
+// Two-way native hook: Swift performs SetRegion/addAnnotation,
+// coordinate events come back to us.
 
 interface Pin {
   id: string

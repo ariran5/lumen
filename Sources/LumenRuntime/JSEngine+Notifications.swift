@@ -2,7 +2,7 @@ import Foundation
 @preconcurrency import JavaScriptCore
 import UserNotifications
 
-/// `lumen.notifications.*` — local notifications через UNUserNotificationCenter.
+/// `lumen.notifications.*` — local notifications via UNUserNotificationCenter.
 ///
 /// API:
 /// ```ts
@@ -13,12 +13,12 @@ import UserNotifications
 /// const unsub = lumen.notifications.onTap.subscribe((id) => {...})
 /// ```
 ///
-/// Push (APNS) НЕ входит — это Tier 2.5 (нужны entitlements + сертификат).
-/// Здесь только local: schedule + trigger по времени.
+/// Push (APNS) is NOT included — that's Tier 2.5 (needs entitlements + certificate).
+/// Here only local: schedule + time-based trigger.
 ///
-/// `onTap` ловит и тапы, и launch-from-notification (когда app killed) — iOS
-/// удерживает response и доставит его как только мы выставим delegate, что
-/// происходит при init JSEngine.
+/// `onTap` catches both taps and launch-from-notification (when app killed) — iOS
+/// holds the response and delivers as soon as we set the delegate, which
+/// happens on JSEngine init.
 extension JSEngine {
     func installNotificationsBridge() {
         guard let lumen = context.objectForKeyedSubscript("lumen") else { return }
@@ -31,7 +31,7 @@ extension JSEngine {
         let originRef = origin
         let nativeRequest: @convention(block) (JSValue, JSValue) -> Void = { resolve, _ in
             Task { @MainActor in
-                // Lumen-layer gate первым: untrusted origin даже до OS не доходит.
+                // Lumen-layer gate first: untrusted origin doesn't even reach the OS.
                 let grant = await PermissionStore.shared.request(origin: originRef, capability: .notifications)
                 guard grant == .granted else {
                     _ = resolve.call(withArguments: ["denied"])
@@ -40,9 +40,9 @@ extension JSEngine {
                 UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
                     DispatchQueue.main.async {
                         MainActor.assumeIsolated {
-                            // OS-layer может всё ещё отказать (юзер ранее denied
-                            // в Settings). Lumen-уровневый grant сохраняем — это
-                            // intent юзера, OS-grant отдельный.
+                            // OS layer can still deny (user previously denied
+                            // in Settings). Keep Lumen-level grant — that's
+                            // user intent, OS grant is separate.
                             _ = resolve.call(withArguments: [granted ? "granted" : "denied"])
                         }
                     }
@@ -59,7 +59,7 @@ extension JSEngine {
             let title = payload.objectForKeyedSubscript("title")?.toString() ?? ""
             let body  = payload.objectForKeyedSubscript("body")?.toString() ?? ""
 
-            // `at` — unix ms. Если нет — fire через 1 секунду (минимум для
+            // `at` — unix ms. If absent — fire after 1 second (minimum for
             // UNTimeIntervalNotificationTrigger).
             let now = Date().timeIntervalSince1970 * 1000
             let atValue = payload.objectForKeyedSubscript("at")
@@ -123,12 +123,12 @@ extension JSEngine {
     }
 }
 
-/// Singleton-delegate `UNUserNotificationCenter`. Делегат у центра один на
-/// процесс — поэтому здесь shared, а не per-engine.
+/// Singleton delegate for `UNUserNotificationCenter`. The center has one delegate
+/// per process — hence shared, not per-engine.
 ///
-/// `pendingTaps` — id'шники нотификаций, на которые юзер тапнул, но JS ещё не
-/// успел вычитать. Drain'ится через `lumen.notifications._consumeTaps()` из
-/// JS-обёртки `onTap.subscribe`.
+/// `pendingTaps` — notification ids the user tapped but JS hasn't yet
+/// consumed. Drained via `lumen.notifications._consumeTaps()` from
+/// the `onTap.subscribe` JS wrapper.
 final class LumenNotificationDelegate: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
     static let shared = LumenNotificationDelegate()
 
@@ -146,9 +146,9 @@ final class LumenNotificationDelegate: NSObject, UNUserNotificationCenterDelegat
         return r
     }
 
-    /// App в foreground'е — по умолчанию iOS гасит notification banner. Здесь
-    /// возвращаем `.banner` чтобы он показался даже когда фастапп открыт —
-    /// нагляднее для PlatformLab demo.
+    /// App is in foreground — by default iOS suppresses the notification banner. Here
+    /// we return `.banner` so it shows even when the fast-app is open —
+    /// clearer for the PlatformLab demo.
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
@@ -165,8 +165,8 @@ final class LumenNotificationDelegate: NSObject, UNUserNotificationCenterDelegat
                 NativeNotifier.shared.fire("notifications.tap")
             }
         }
-        // Apple требует "as soon as possible" — фаерим сразу, наша работа на
-        // main выполнится отдельно.
+        // Apple requires "as soon as possible" — fire immediately, our work on
+        // main runs separately.
         completionHandler()
     }
 }

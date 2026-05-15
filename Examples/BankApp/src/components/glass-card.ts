@@ -1,12 +1,12 @@
-// GlassCard — surface-обёртка для секций (баланс, action grid, list group).
-// Не Liquid Glass — простой rounded-rect с subtle border. Liquid Glass
-// (`Glass({intensity:'glass'})`) приберегаем для тех мест, где есть фон-картинка
-// под пилюлей; на flat-dark surface'е разницы не видно, а fillrate дороже.
+// GlassCard — surface wrapper for sections (balance, action grid, list group).
+// Not Liquid Glass — a simple rounded-rect with a subtle border. Liquid Glass
+// (`Glass({intensity:'glass'})`) is reserved for places with a background image
+// under the pill; on a flat-dark surface the difference isn't visible and fillrate is more expensive.
 
 import { colors, radius, space } from '../lib/colors'
 
 interface GlassCardProps {
-  children?: never  // children приходят через варарги, не prop
+  children?: never  // children come via varargs, not as a prop
   padding?: number
   gap?: number
 }

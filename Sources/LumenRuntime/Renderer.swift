@@ -5,9 +5,9 @@ import MapKit
 import QuartzCore
 import UIKit
 
-/// Узел смонтированного дерева. Зеркалит RenderNode, но удерживает живой
-/// CALayer и текущее состояние — на этом diff умеет переиспользовать
-/// слои между рендерами, не сбрасывая sublayers/animations/contents.
+/// Mounted-tree node. Mirrors RenderNode but holds a live
+/// CALayer and current state — on this the diff can reuse
+/// layers across renders without dropping sublayers/animations/contents.
 @MainActor
 final class MountedNode {
     var node: RenderNode
@@ -15,22 +15,22 @@ final class MountedNode {
     var children: [MountedNode]
     var loadedImageSource: String?
 
-    // virtualList overlay: UICollectionView сидит как subview hostView,
-    // а её frame ведётся по `layer` в absolute координатах rootLayer.
+    // virtualList overlay: UICollectionView sits as a subview of hostView,
+    // its frame is driven by `layer` in absolute coordinates of rootLayer.
     var virtualListView: VirtualListView?
     var virtualListController: VirtualListController?
 
-    // textInput overlay: native UITextField субвьюхой hostView.
+    // textInput overlay: native UITextField as a subview of hostView.
     var textInputView: LumenTextField?
     var textInputController: TextInputController?
 
-    // scroll overlay: UIScrollView с nested Renderer'ом внутри contentView.
+    // scroll overlay: UIScrollView with a nested Renderer inside contentView.
     var scrollView: LumenScrollView?
 
-    // blur overlay: UIVisualEffectView с nested Renderer'ом внутри contentView.
+    // blur overlay: UIVisualEffectView with a nested Renderer inside contentView.
     var blurView: LumenBlurView?
 
-    // map overlay: MKMapView с региону/пинами/событиями.
+    // map overlay: MKMapView with region/pins/events.
     var mapView: LumenMapView?
 
     init(node: RenderNode, layer: CALayer) {
@@ -43,11 +43,11 @@ final class MountedNode {
 @MainActor
 final class Renderer {
     enum ContentMode {
-        /// Дочерние узлы растягиваются под bounds родителя (стандартный режим).
+        /// Child nodes stretch to parent bounds (standard mode).
         case stretch
-        /// Layout считается с `height: .greatestFiniteMagnitude` — нужно для
-        /// scroll-контента, где высота определяется суммой детей, а не родителя.
-        /// `computedContentHeight()` возвращает реальную высоту после layout.
+        /// Layout is computed with `height: .greatestFiniteMagnitude` — needed for
+        /// scroll content where height is determined by the sum of children, not the parent.
+        /// `computedContentHeight()` returns the actual height after layout.
         case scrollContent
     }
 
@@ -64,9 +64,9 @@ final class Renderer {
     private(set) var lastRenderMs: Double = 0
     private(set) var lastDiffMs: Double = 0
 
-    /// Global node-id → MountedNode index. Используется для fine-grained
-    /// JS-биндингов: `lumen._patchProp(id, key, val)` находит CALayer и
-    /// применяет одно свойство без полного reconcile-обхода.
+    /// Global node-id → MountedNode index. Used for fine-grained
+    /// JS bindings: `lumen._patchProp(id, key, val)` finds the CALayer and
+    /// applies one property without a full reconcile walk.
     @MainActor static var nodeIndex: [Int: WeakMountedRef] = [:]
     @MainActor
     final class WeakMountedRef {
@@ -88,22 +88,22 @@ final class Renderer {
         gestureRouter = GestureRouter(host: hostView, rootLayer: hostView.layer)
     }
 
-    /// Hook вызываемый после `replaceChildren`/`relayout`. Используется
-    /// LumenScrollView чтобы пересчитать contentSize когда slot изменил
-    /// число детей.
+    /// Hook called after `replaceChildren`/`relayout`. Used by
+    /// LumenScrollView to recompute contentSize when a slot has changed
+    /// the number of children.
     var onAfterLayout: (@MainActor () -> Void)?
 
-    /// Колбэк после reconcile/replaceChildren с id-шниками узлов которые
-    /// сняты с маунта. JS-сторона использует это чтобы dispose'нуть
-    /// per-node EffectScope'ы (см. `nodeScopes` в CoreFramework).
+    /// Callback after reconcile/replaceChildren with ids of nodes that
+    /// were unmounted. JS side uses this to dispose
+    /// per-node EffectScopes (see `nodeScopes` in CoreFramework).
     var onNodesDisposed: (@MainActor ([Int]) -> Void)?
 
-    /// Накапливает ids между шагами reconcile. Flush'ится в конце
-    /// `relayout()` и `replaceChildren()` единственным batch-вызовом.
+    /// Accumulates ids between reconcile steps. Flushed at the end of
+    /// `relayout()` and `replaceChildren()` as a single batch call.
     private var disposalBuffer: [Int] = []
 
-    /// Меняет children узла с заданным id, мутирует lastTree, и запускает
-    /// relayout. Используется Slot-thunk'ами через `lumen._replaceChildren`.
+    /// Replaces children of the node with the given id, mutates lastTree, and
+    /// runs relayout. Used by Slot thunks via `lumen._replaceChildren`.
     func replaceChildren(id: Int, newChildren: [RenderNode]) {
         guard var tree = lastTree else { return }
         if Self.mutateChildren(&tree, id: id, newChildren: newChildren) {
@@ -114,9 +114,9 @@ final class Renderer {
         }
     }
 
-    /// Обновляет текст узла id в lastTree + запускает relayout. Без этого
-    /// patch только меняет CATextLayer.string, оставляя старый frame —
-    /// длинный новый текст обрезается по старому intrinsic.
+    /// Updates the node's text in lastTree + runs relayout. Without this
+    /// patch only changes CATextLayer.string, leaving the old frame —
+    /// long new text gets truncated to the old intrinsic.
     func patchText(id: Int, text: String) {
         guard var tree = lastTree else { return }
         if Self.mutateText(&tree, id: id, text: text) {
@@ -162,7 +162,7 @@ final class Renderer {
     }
 
     /// Returns the maximum Y-extent of the root's children + bottom padding.
-    /// Используется ScrollView для определения contentSize.
+    /// Used by ScrollView to determine contentSize.
     func computedContentHeight() -> CGFloat {
         guard let root = lastFlexRoot else { return 0 }
         let maxY = root.children.map { $0.frame.maxY }.max() ?? 0
@@ -189,8 +189,8 @@ final class Renderer {
         var size = rootLayer.bounds.size
         guard size.width > 0 else { return }
         if contentMode == .scrollContent {
-            // Scroll-режим: высота не должна ограничивать layout. Дети
-            // получат свои intrinsic размеры и натурально стэкнутся сверху.
+            // Scroll mode: height must not constrain layout. Children
+            // get their intrinsic sizes and naturally stack from the top.
             size.height = .greatestFiniteMagnitude
         } else if size.height <= 0 {
             return
@@ -224,13 +224,13 @@ final class Renderer {
 
         CATransaction.commit()
 
-        // Z-order fix для UIView-носителей (ScrollView/Blur/VirtualList/Map/
-        // TextInput). Они все живут как плоские sublayers `hostView` (не
-        // вложены в layer-tree родительского View), а `addSubview` всегда
-        // ставит view на верх. Если сначала смонтирован TabBar.Glass, а
-        // потом другой страницей — ScrollView, то ScrollView перекрывает
-        // TabBar и tap'ы по нему не доходят.
-        // Walk'аем дерево DFS и приводим subview-order к древесному.
+        // Z-order fix for UIView-backed nodes (ScrollView/Blur/VirtualList/Map/
+        // TextInput). They all live as flat sublayers of `hostView` (not
+        // nested in the layer-tree of the parent View), and `addSubview` always
+        // puts the view on top. If TabBar.Glass mounted first and
+        // then a ScrollView on another page, ScrollView covers
+        // the TabBar and taps don't reach it.
+        // Walk the tree DFS and align subview-order with the tree order.
         if let host = hostView, let root = mountedRoot {
             reorderEmbeddedViews(in: host, mount: root)
         }
@@ -241,10 +241,10 @@ final class Renderer {
         flushDisposalBuffer()
     }
 
-    /// Pre-order DFS: каждый встреченный UIView-носитель ставится на верх
-    /// `host.subviews` через `bringSubviewToFront`. После прохода последний
-    /// (deepest-rightmost) узел оказывается на самом верху — совпадает с
-    /// порядком детей в RenderNode tree.
+    /// Pre-order DFS: every UIView-backed node encountered is brought to the
+    /// front of `host.subviews` via `bringSubviewToFront`. After the walk the last
+    /// (deepest-rightmost) node ends up on top — matching
+    /// child order in the RenderNode tree.
     private func reorderEmbeddedViews(in host: UIView, mount: MountedNode) {
         if let v = mount.scrollView      { host.bringSubviewToFront(v) }
         if let v = mount.blurView        { host.bringSubviewToFront(v) }
@@ -290,7 +290,7 @@ final class Renderer {
 
         if node.kind == .virtualList {
             mountVirtualList(mount: mount, node: node, flex: flex)
-            return mount  // virtualList не имеет CALayer-детей
+            return mount  // virtualList has no CALayer children
         }
 
         if node.kind == .textInput {
@@ -378,8 +378,8 @@ final class Renderer {
         bv.update(intensity: node.blurIntensity,
                   children: node.children,
                   wrapperStyle: node.style)
-        // corner radius/border применяются к самому wrapper'у — внешний layer
-        // отвечает за clip, а внутри effectView рендерится контент.
+        // corner radius/border are applied to the wrapper itself — the outer layer
+        // handles the clip, and inside effectView the content renders.
         bv.layer.cornerRadius = CGFloat(node.style.borderRadius)
         bv.layer.masksToBounds = node.style.borderRadius > 0
         if let borderColor = node.style.borderColor {
@@ -413,20 +413,20 @@ final class Renderer {
 
     // MARK: - Reconcile
 
-    /// При reconcile id узла может смениться (build-time счётчик в JS
-    /// перевыдаёт ids на каждом mount-rerun). Обновляем nodeIndex чтобы
-    /// per-prop effect'ы для нового id находили правильный CALayer.
+    /// On reconcile the node id may change (build-time counter in JS
+    /// re-issues ids on each mount-rerun). We update nodeIndex so
+    /// per-prop effects for the new id find the right CALayer.
     ///
-    /// Для same-id случая мы НЕ overwrite'аем `mounted.node` целиком —
-    /// его `.style` мог быть обновлён per-prop patch'ами и является
-    /// canonical state'ом layer'а. Зато синхронизируем `text` (patchText
-    /// мутирует lastTree.text и ждёт что mount подхватит) и `source`.
+    /// For the same-id case we do NOT overwrite `mounted.node` entirely —
+    /// its `.style` may have been updated by per-prop patches and is the
+    /// canonical state of the layer. We do sync `text` (patchText
+    /// mutates lastTree.text and expects mount to pick it up) and `source`.
     private func updateMountedNode(_ mounted: MountedNode, with next: RenderNode) {
         let sameId = mounted.node.id != nil && mounted.node.id == next.id
         if sameId {
-            // Sync только то что могло прийти через tree-мутации (patchText,
-            // структурные обновления). Стиль/handler'ы оставляем mount'у —
-            // он держит state, синхронизированный с per-prop patch'ами.
+            // Sync only what could come from tree mutations (patchText,
+            // structural updates). Leave style/handlers to mount —
+            // it holds state synchronized with per-prop patches.
             if mounted.node.text != next.text {
                 mounted.node.text = next.text
             }
@@ -438,10 +438,10 @@ final class Renderer {
 
         if let oldId = mounted.node.id, oldId != next.id {
             Self.nodeIndex.removeValue(forKey: oldId)
-            // Старый id больше нигде не используется (layer reused, но id
-            // принадлежал JS-узлу который теперь заменён). JS-scope нужно
-            // dispose'ить — иначе orphan effect'ы продолжают патчить layer
-            // под уже не своим id.
+            // Old id is no longer used anywhere (layer reused, but id
+            // belonged to a JS node now replaced). JS scope must
+            // be disposed — otherwise orphan effects keep patching the layer
+            // under an id that's no longer theirs.
             disposalBuffer.append(oldId)
         }
         if let newId = next.id, mounted.node.id != newId {
@@ -457,9 +457,9 @@ final class Renderer {
                            flex: FlexNode,
                            counter: inout Int) {
         if mounted.node.kind != next.kind {
-            // Тип сменился — снести и перемонтировать в той же позиции
-            // в parent.sublayers. Indexing внутри parent сохраняется,
-            // потому что в `reconcile` родителя мы ходим index-by-index.
+            // Type changed — tear down and remount at the same position
+            // in parent.sublayers. Indexing inside parent is preserved,
+            // because in parent's `reconcile` we walk index-by-index.
             removeMountTree(mounted)
             let layer = makeLayer(for: next)
             parent.addSublayer(layer)
@@ -502,24 +502,23 @@ final class Renderer {
             return
         }
 
-        // Тот же kind: переиспользуем layer.
+        // Same kind: reuse the layer.
         //
-        // Если id узла не сменился — JS не пересобирал поддерево, и
-        // `next.style` это ровно тот же style, что был построен на mount
-        // (или в последнем JS-rerun этого узла). Реальные динамические
-        // изменения визуальных пропов (color, backgroundColor, opacity, …)
-        // идут через per-prop effect'ы → `lumen._patchProp` → applyPatch,
-        // которое уже обновило layer и `mount.node.style`.
+        // If the node id hasn't changed — JS didn't rebuild the subtree, and
+        // `next.style` is exactly the same style that was built at mount
+        // (or in the last JS-rerun of this node). Real dynamic changes of
+        // visual props (color, backgroundColor, opacity, …) go through
+        // per-prop effects → `lumen._patchProp` → applyPatch, which already
+        // updated the layer and `mount.node.style`.
         //
-        // Если мы здесь re-apply'нем `next.style`, мы перезапишем layer
-        // обратно из stale значения tree'а — это fight'ится с patch'ами и
-        // даёт мелькание (классический пример: TabBar где siblings
-        // постоянно rebuild'ятся, а tab-bar slot не пересоздаётся → outer
-        // tree'овский Text node остаётся со старым style.color, который
-        // перезаписывает только что положенный patch).
+        // If we re-apply `next.style` here, we'd overwrite the layer back
+        // from the tree's stale value — that fights with patches and causes
+        // flicker (classic example: TabBar where siblings constantly rebuild
+        // but the tab-bar slot does not → the outer tree's Text node keeps
+        // a stale style.color which then overwrites the just-applied patch).
         //
-        // Поэтому при same-id reconcile делаем ТОЛЬКО geometry + text/image
-        // content sync + gestures. Visual style apply пропускаем.
+        // Therefore at same-id reconcile we do ONLY geometry + text/image
+        // content sync + gestures. Visual style apply is skipped.
         let sameId = mounted.node.id != nil && mounted.node.id == next.id
         if sameId {
             applyGeometryOnly(mount: mounted,
@@ -565,7 +564,7 @@ final class Renderer {
             return
         }
 
-        // Index-based reconcile детей (без key-LIS пока).
+        // Index-based reconcile of children (no key-LIS yet).
         let myOrigin = CGPoint(x: flex.frame.minX, y: flex.frame.minY)
         let prevCount = mounted.children.count
         let nextCount = next.children.count
@@ -706,8 +705,8 @@ final class Renderer {
                                                     renderFn: renderFn)
             }
         } else {
-            // Появилась virtualList на reconcile (например после kind swap'а
-            // или впервые) — mount.
+            // virtualList appeared on reconcile (e.g. after a kind swap
+            // or for the first time) — mount it.
             mountVirtualList(mount: mount, node: node, flex: flex)
         }
     }
@@ -719,10 +718,10 @@ final class Renderer {
                           node: RenderNode,
                           flex: FlexNode,
                           parentOrigin: CGPoint) {
-        // bounds + position, не frame: frame setter компенсирует transform,
-        // из-за чего translateX/Y не даёт визуального движения.
-        // Custom hit-test walker (см. GestureRouter) умеет читать transformed
-        // layer.frame, так что hit-area следует за transform автоматически.
+        // bounds + position, not frame: the frame setter compensates for
+        // transform, so translateX/Y wouldn't produce visible motion.
+        // The custom hit-test walker (see GestureRouter) reads transformed
+        // layer.frame, so hit-area follows the transform automatically.
         let bounds = CGRect(x: 0, y: 0,
                             width: flex.frame.width,
                             height: flex.frame.height)
@@ -749,12 +748,12 @@ final class Renderer {
         applyGestures(layer: layer, node: node)
     }
 
-    /// Subset of applyAll: только geometry/gestures/image-source/text-content,
-    /// БЕЗ apply'я визуальных стилей. Используется при reconcile same-id
-    /// узла — стили там уже наложены mount'ом или последним per-prop
-    /// patch'ем, и переписывать их из (потенциально stale) lastTree нельзя.
-    /// Текст-контент при этом обновляется: patchText мутирует lastTree.text,
-    /// и здесь мы синхронизируем layer + mount.node.text.
+    /// Subset of applyAll: only geometry/gestures/image-source/text-content,
+    /// WITHOUT applying visual styles. Used during reconcile of a same-id
+    /// node — styles are already in place from mount or the last per-prop
+    /// patch, and overwriting them from (potentially stale) lastTree is wrong.
+    /// Text content still syncs: patchText mutates lastTree.text, and here
+    /// we sync layer + mount.node.text.
     private func applyGeometryOnly(mount: MountedNode,
                                    node: RenderNode,
                                    flex: FlexNode,
@@ -770,9 +769,9 @@ final class Renderer {
         if layer.bounds != bounds { layer.bounds = bounds }
         if layer.position != position { layer.position = position }
 
-        // Text content sync: patchText мутирует tree, но layer.string держит
-        // прежний текст. Перерисовываем используя mount.node.style — там
-        // живут per-prop patched цвета/шрифты, а не stale tree style.
+        // Text content sync: patchText mutates the tree, but layer.string
+        // still holds the old text. Re-render using mount.node.style — that
+        // holds per-prop patched colors/fonts, not the stale tree style.
         if node.kind == .text,
            let textLayer = layer as? CATextLayer,
            mount.node.text != node.text,
@@ -780,7 +779,7 @@ final class Renderer {
             applyTextStyle(textLayer, text: newText, style: mount.node.style)
         }
 
-        // Image source sync — аналогично.
+        // Image source sync — same idea.
         if node.kind == .image, let src = node.source {
             if mount.loadedImageSource != src {
                 applyImage(layer: layer, source: src)
@@ -843,8 +842,8 @@ final class Renderer {
         }
         layer.masksToBounds = style.borderRadius > 0
 
-        // transform + opacity: либо delegate в AnimationManager (если есть
-        // AnimatedValue-биндинги), либо прямой apply как раньше.
+        // transform + opacity: either delegate to AnimationManager (if there
+        // are AnimatedValue bindings), or apply directly as before.
         if style.hasAnimBindings {
             var animIds: [AnimationManager.Property: Int] = [:]
             if let id = style.transform.translateXAnimId { animIds[.translateX] = id }
@@ -867,8 +866,8 @@ final class Renderer {
                 staticOpacity: style.opacity
             )
         } else {
-            // На случай если layer раньше был animated, а сейчас перестал быть —
-            // снять биндинги, чтобы AnimatedValue.set не мутировал чужой layer.
+            // In case the layer used to be animated but no longer is —
+            // unbind so AnimatedValue.set doesn't mutate someone else's layer.
             AnimationManager.shared.unbindLayer(layer)
             layer.opacity = Float(style.opacity)
 

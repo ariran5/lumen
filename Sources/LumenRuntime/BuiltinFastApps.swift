@@ -1,8 +1,8 @@
 import Foundation
 
-/// Источник кода для встроенных lumen:// fast-app'ов (history, settings, ...).
-/// JS встроен прямо строкой — нет необходимости в bundling-пайплайне.
-/// Когда builtin'ов станет много — переедет в файлы-ресурсы.
+/// Source of code for built-in lumen:// fast-apps (history, settings, ...).
+/// JS is inlined as a string — no need for a bundling pipeline.
+/// Once there are many built-ins — will move to resource files.
 enum BuiltinFastApps {
     static func script(for host: String) -> String? {
         switch host {
@@ -25,8 +25,8 @@ enum BuiltinFastApps {
     // MARK: - home
 
     private static let homeJS: String = #"""
-// lumen://home — стартовая страница. Тёмная палитра под shell,
-// greeting + AI card + pinned grid + recent (из lumen.history).
+// lumen://home — start page. Dark palette matching the shell,
+// greeting + AI card + pinned grid + recent (from lumen.history).
 
 function hostOf(u) {
   const m = /^[a-z]+:\/\/([^\/]+)/i.exec(u || '')
@@ -60,33 +60,33 @@ const pinned = [
   {name: 'History', ico: '⏱', bg: '#2A2A35', fg: '#ECECEE', url: 'lumen://history'},
 ]
 
-// Lumen platform showcase — каждая chip открывает соответствующий Lab,
-// чтоб быстро глянуть live-демо примитива / API. dev-server должен крутиться
-// на 192.168.0.107:80xx.
+// Lumen platform showcase — each chip opens the corresponding Lab.
+// Replace 127.0.0.1 with your machine's LAN IP when testing from a physical
+// device (e.g. http://192.168.x.x:80XX). Default works for the simulator.
 const labs = [
   {name: 'Tabs',     ico: '⊞', bg: '#3B82F6', fg: '#FFFFFF',
-   url: 'http://192.168.0.107:8080',
+   url: 'http://127.0.0.1:8080',
    desc: 'multi-tab API'},
   {name: 'Drag',     ico: '✥', bg: '#F59E0B', fg: '#0B0B0F',
-   url: 'http://192.168.0.107:8082',
+   url: 'http://127.0.0.1:8082',
    desc: 'gestures + spring'},
   {name: 'Glass',    ico: '◐', bg: '#A78BFA', fg: '#0B0B0F',
-   url: 'http://192.168.0.107:8083',
+   url: 'http://127.0.0.1:8083',
    desc: 'iOS 26 Liquid Glass'},
   {name: 'Scroll',   ico: '⇅', bg: '#10B981', fg: '#0B0B0F',
-   url: 'http://192.168.0.107:8084',
+   url: 'http://127.0.0.1:8084',
    desc: 'scroll + safe-area'},
   {name: 'Inputs',   ico: 'A|', bg: '#EC4899', fg: '#FFFFFF',
-   url: 'http://192.168.0.107:8085',
+   url: 'http://127.0.0.1:8085',
    desc: 'TextInput'},
   {name: 'Sheets',   ico: '▭', bg: '#06B6D4', fg: '#0B0B0F',
-   url: 'http://192.168.0.107:8086',
+   url: 'http://127.0.0.1:8086',
    desc: 'bottomSheet'},
   {name: 'Maps',     ico: '◉', bg: '#22C55E', fg: '#0B0B0F',
-   url: 'http://192.168.0.107:8088',
+   url: 'http://127.0.0.1:8088',
    desc: 'native MKMapView'},
   {name: 'Platform', ico: '⚡', bg: '#B69CFF', fg: '#0B0B0F',
-   url: 'http://192.168.0.107:8089',
+   url: 'http://127.0.0.1:8089',
    desc: 'clipboard · share · ws · keychain · picker'},
 ]
 
@@ -303,14 +303,14 @@ mount(App)
     // MARK: - history
 
     private static let historyJS: String = #"""
-// lumen://history — минимальная история визитов.
-// Pure JS (no TS): подаётся прямо в JSC без транспиляции.
+// lumen://history — minimal visit history.
+// Pure JS (no TS): fed directly to JSC without transpilation.
 
 const items = signal(lumen.history.list())
 
-// Push-канал: HistoryStore (Swift) дёргает наш callback после любой мутации,
-// в т.ч. от записи визита в другой табе через addressBar. items — signal,
-// Vapor effect'ы перерисуют только нужные слоты.
+// Push channel: HistoryStore (Swift) calls our callback after any mutation,
+// including a visit recorded in another tab via addressBar. items is a signal,
+// Vapor effects re-render only the affected slots.
 lumen.history.subscribe(function () {
   items.value = lumen.history.list()
 })
@@ -324,7 +324,7 @@ function timeAgo(ms) {
 }
 
 function hostOf(u) {
-  // JSC не имеет URL — парсим вручную.
+  // JSC has no URL — parse manually.
   const m = /^[a-z]+:\/\/([^\/]+)/i.exec(u || '')
   return m ? m[1] : (u || '')
 }

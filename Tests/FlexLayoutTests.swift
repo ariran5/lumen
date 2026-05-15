@@ -148,8 +148,8 @@ final class FlexLayoutTests: XCTestCase {
     // MARK: - Intrinsic sizing (shrink-to-fit, P2.3)
 
     func testIntrinsicRowFromChildren() {
-        // Контейнер без явной width должен взять size из детей + padding + gap.
-        // Parent с alignItems=.start, иначе по CSS-default stretch растянет cross.
+        // A container without explicit width should take its size from children + padding + gap.
+        // Parent uses alignItems=.start, otherwise the CSS-default stretch grows the cross axis.
         var rs = FlexStyle()
         rs.direction = .row
         rs.padding = FlexInsets(uniform: 8)
@@ -200,7 +200,7 @@ final class FlexLayoutTests: XCTestCase {
     }
 
     func testIntrinsicWithTextMeasure() {
-        // Контейнер с одним text leaf-ом — должен заиметь size от measure.
+        // Container with a single text leaf — must get its size from measure.
         var ps = FlexStyle()
         ps.direction = .row
         ps.alignItems = .start

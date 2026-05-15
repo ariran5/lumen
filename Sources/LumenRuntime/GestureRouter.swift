@@ -2,7 +2,7 @@ import JavaScriptCore
 import QuartzCore
 import UIKit
 
-/// Кэш handler'ов на каждый CALayer. Renderer обновляет на каждый mount/reconcile.
+/// Handler cache per CALayer. Renderer updates on every mount/reconcile.
 @MainActor
 struct LayerGestures {
     var onTap: JSValue?
@@ -19,11 +19,11 @@ struct LayerGestures {
     }
 }
 
-/// Один на rootLayer: вешает все нужные UIGestureRecognizer'ы на hostView
-/// и на каждый firing делает hit-test через CALayer-tree, находит target узла,
-/// зовёт соответствующий JS handler с event-объектом.
+/// One per rootLayer: attaches all needed UIGestureRecognizers to hostView
+/// and on each firing does a hit-test through the CALayer tree, finds the target node,
+/// calls the matching JS handler with an event object.
 ///
-/// Преимущество — N recognizer'ов на hostView, не N×K на каждом layer'е.
+/// Advantage — N recognizers on hostView, not N×K on each layer.
 @MainActor
 final class GestureRouter: NSObject, UIGestureRecognizerDelegate {
 
@@ -39,8 +39,8 @@ final class GestureRouter: NSObject, UIGestureRecognizerDelegate {
     private var rotate: UIRotationGestureRecognizer?
     private var swipes: [UISwipeGestureRecognizer] = []
 
-    // pan «захватывает» layer на .began и держит его до завершения цикла,
-    // чтобы координаты считались относительно того же узла
+    // pan "captures" the layer on .began and holds it until cycle end,
+    // so coordinates stay relative to the same node
     private weak var panLayer: CALayer?
 
     private static var routerKey: UInt8 = 0
@@ -50,8 +50,8 @@ final class GestureRouter: NSObject, UIGestureRecognizerDelegate {
         self.rootLayer = rootLayer
         super.init()
         install()
-        // gesture recognizers ссылаются на target через unowned — нужен strong-ref,
-        // иначе после deinit Renderer сканер a11y дёрнет dangling pointer.
+        // gesture recognizers refer to target via unowned — need a strong ref,
+        // otherwise after Renderer deinit the a11y scanner hits a dangling pointer.
         objc_setAssociatedObject(host, &GestureRouter.routerKey,
                                   self, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
@@ -78,9 +78,9 @@ final class GestureRouter: NSObject, UIGestureRecognizerDelegate {
     private func install() {
         guard let host else { return }
 
-        // Single tap — без require(toFail: doubleTap), фейрит мгновенно.
-        // DoubleTap пока убран, потому что его recognizer на реальном железе
-        // конфликтует с single tap и крадёт события. Вернём позже через
+        // Single tap — without require(toFail: doubleTap), fires immediately.
+        // DoubleTap is removed for now because on real hardware its recognizer
+        // conflicts with single tap and steals events. Will return later via
         // custom touch handling.
         let st = UITapGestureRecognizer(target: self, action: #selector(handleSingleTap(_:)))
         st.cancelsTouchesInView = false
@@ -98,11 +98,11 @@ final class GestureRouter: NSObject, UIGestureRecognizerDelegate {
         let pn = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
         pn.cancelsTouchesInView = false
         pn.delegate = self
-        // tap должен «выиграть» против pan для микро-движений пальца на узлах
-        // которые конкретно имеют onTap. Это решается через
-        // gestureRecognizerShouldBegin ниже — pan не активируется на узлах
-        // без onPan, поэтому конфликт типа «pan steals tap» появляется только
-        // когда у одного узла есть и onTap, и onPan (редкий кейс).
+        // tap must "win" against pan for micro finger movements on nodes
+        // that specifically have onTap. This is solved via
+        // gestureRecognizerShouldBegin below — pan won't activate on nodes
+        // without onPan, so the "pan steals tap" conflict only appears
+        // when one node has both onTap and onPan (rare case).
         host.addGestureRecognizer(pn)
         pan = pn
 
@@ -128,9 +128,9 @@ final class GestureRouter: NSObject, UIGestureRecognizerDelegate {
         }
     }
 
-    /// Recognizer активируется только если под начальной точкой касания есть
-    /// узел с соответствующим handler'ом. Это убирает interference между
-    /// pan / swipe / pinch — каждый занят «своими» узлами.
+    /// Recognizer activates only if under the initial touch point there's
+    /// a node with the matching handler. This removes interference between
+    /// pan / swipe / pinch — each only fires on its "own" nodes.
     nonisolated func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         guard let view = gestureRecognizer.view else { return true }
         let point = gestureRecognizer.location(in: view)
@@ -158,8 +158,8 @@ final class GestureRouter: NSObject, UIGestureRecognizerDelegate {
         }
     }
 
-    // Делегат: разрешаем pinch+rotate одновременно (типичный жест), остальные —
-    // взаимоисключающие (UIKit defaults).
+    // Delegate: allow pinch+rotate simultaneously (typical gesture), others
+    // are mutually exclusive (UIKit defaults).
     nonisolated func gestureRecognizer(_ a: UIGestureRecognizer,
                                        shouldRecognizeSimultaneouslyWith b: UIGestureRecognizer) -> Bool {
         let aIsPinchRot = a is UIPinchGestureRecognizer || a is UIRotationGestureRecognizer
@@ -318,10 +318,10 @@ final class GestureRouter: NSObject, UIGestureRecognizerDelegate {
         return ["x": Double(local.x), "y": Double(local.y)]
     }
 
-    /// Custom hit-test: рекурсивно ищем самый глубокий layer под точкой,
-    /// у которого зарегистрирован нужный handler. CALayer.hitTest от Apple
-    /// требует point в superlayer's coord system — в нашем случае это
-    /// неудобно, и поведение нестабильно. Свой walker explicit и точен.
+    /// Custom hit-test: recursively find the deepest layer under the point
+    /// that has the needed handler registered. Apple's CALayer.hitTest
+    /// expects point in superlayer's coord system — in our case that's
+    /// inconvenient and behavior is unstable. Our walker is explicit and precise.
     private func hitTest(rootLayer: CALayer, point: CGPoint,
                          where match: (LayerGestures) -> Bool) -> (CALayer, LayerGestures)? {
         return walk(layer: rootLayer, pointInLayer: point, match: match)
@@ -329,8 +329,8 @@ final class GestureRouter: NSObject, UIGestureRecognizerDelegate {
 
     private func walk(layer: CALayer, pointInLayer: CGPoint,
                        match: (LayerGestures) -> Bool) -> (CALayer, LayerGestures)? {
-        // Сначала ищем в детях (deepest first, как естественный z-order),
-        // потом — себя.
+        // First search children (deepest first, natural z-order),
+        // then self.
         if let sublayers = layer.sublayers {
             for sublayer in sublayers.reversed() {
                 guard sublayer.frame.contains(pointInLayer) else { continue }

@@ -1,7 +1,7 @@
-// Push-route registry. Содержит ТОЛЬКО страницы, которые открываются
-// `lumen.router.push` поверх tab-bar'а (детали транзакции, дип-флоу).
-// Top-level страницы (Home / History / Cards / Profile) переключаются
-// через `state/ui.ts → activeTab` и здесь не регистрируются.
+// Push-route registry. Contains ONLY pages that are opened via
+// `lumen.router.push` on top of the tab-bar (transaction details, deep flow).
+// Top-level pages (Home / History / Cards / Profile) are switched via
+// `state/ui.ts → activeTab` and are not registered here.
 
 import { transactionDetailPage } from './pages/transaction-detail'
 

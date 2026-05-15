@@ -2,16 +2,16 @@ import Foundation
 import JavaScriptCore
 import Security
 
-/// `lumen.secureStorage.{get,set,remove}` — Keychain через `SecItem*`.
-/// В отличие от `lumen.storage` (UserDefaults) — шифруется системой,
-/// доступно после первого unlock, не уходит в iCloud backup по умолчанию.
-/// Использовать для auth-токенов, паролей, API-ключей.
+/// `lumen.secureStorage.{get,set,remove}` — Keychain via `SecItem*`.
+/// Unlike `lumen.storage` (UserDefaults) — encrypted by the system,
+/// available after first unlock, doesn't go to iCloud backup by default.
+/// Use for auth tokens, passwords, API keys.
 extension JSEngine {
     func installSecureStorageBridge() {
         guard let lumen = context.objectForKeyedSubscript("lumen") else { return }
         let secureStorage = JSValue(newObjectIn: context)!
-        // Keychain service per origin. SecItemDelete по service'у = wipe
-        // всех secure-entries одного app'а одним вызовом (для clear-site-data).
+        // Keychain service per origin. SecItemDelete by service = wipe
+        // all secure entries of a single app in one call (for clear-site-data).
         let service = originContext.keychainService
 
         let get: @convention(block) (String?) -> String? = { key in
@@ -37,7 +37,7 @@ extension JSEngine {
             guard let key, !key.isEmpty else { return false }
             let data = (value ?? "").data(using: .utf8) ?? Data()
 
-            // Idempotent: удалить старое значение и добавить новое.
+            // Idempotent: delete old value and add new.
             let delQuery: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
                 kSecAttrService as String: service,

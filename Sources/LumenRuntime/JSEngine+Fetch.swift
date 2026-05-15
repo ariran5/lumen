@@ -37,7 +37,7 @@ extension JSEngine {
         }
 
         // Sandbox network policy: blocks cross-origin requests not in manifest's
-        // `connect` allowlist. См. NetworkPolicy.swift.
+        // `connect` allowlist. See NetworkPolicy.swift.
         let policy = engine.originContext.networkPolicy
         guard policy.allows(url: url) else {
             rejectWith(engine: engine,
@@ -61,9 +61,9 @@ extension JSEngine {
                     req.setValue(String(describing: v), forHTTPHeaderField: k)
                 }
             }
-            // body: ArrayBuffer / typed array → raw bytes; иначе → toString()
-            // как UTF-8. Так fetch остаётся совместим со старыми вызовами
-            // (`body: JSON.stringify(...)`) и поддерживает binary upload.
+            // body: ArrayBuffer / typed array → raw bytes; otherwise → toString()
+            // as UTF-8. This keeps fetch compatible with old calls
+            // (`body: JSON.stringify(...)`) and supports binary upload.
             if let bodyVal = options.objectForKeyedSubscript("body"),
                !bodyVal.isUndefined, !bodyVal.isNull {
                 if let bin = extractBinaryBytes(from: bodyVal) {
@@ -98,8 +98,8 @@ extension JSEngine {
                 }
             }
         }
-        // Task-scoped delegate (iOS 15+): валидирует cross-origin редиректы
-        // против policy. Hold ref до task'а — task ретейнит delegate'а.
+        // Task-scoped delegate (iOS 15+): validates cross-origin redirects
+        // against the policy. Hold ref until task completes — task retains the delegate.
         task.delegate = NetworkRedirectGuard(policy: policy)
         task.resume()
     }
@@ -113,9 +113,9 @@ extension JSEngine {
         response.setObject(status, forKeyedSubscript: "status" as NSString)
         response.setObject(ok, forKeyedSubscript: "ok" as NSString)
 
-        // UTF-8 декод для text()/json(). Lossy для binary — но это и
-        // ожидаемое поведение fetch'а: бинарные ответы читают через
-        // arrayBuffer(), не text().
+        // UTF-8 decode for text()/json(). Lossy for binary — but that's
+        // expected fetch behavior: binary responses are read via
+        // arrayBuffer(), not text().
         let bodyText = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
         response.setObject(bodyText, forKeyedSubscript: "_body" as NSString)
 
@@ -159,15 +159,15 @@ extension JSEngine {
 
 /// JSC C-API helpers — ArrayBuffer ↔ Data.
 ///
-/// Read side: `extractBinaryBytes` принимает JSValue, проверяет это
-/// ArrayBuffer или TypedArray, и копирует байты в `Data`. Для маленьких
-/// файлов копия дешёвая; альтернатива — `noCopy` версия с retain'ом
-/// исходного буфера, но это редко стоит сложности.
+/// Read side: `extractBinaryBytes` takes a JSValue, checks if it's
+/// ArrayBuffer or TypedArray, and copies bytes into `Data`. For small
+/// files copy is cheap; alternative is the `noCopy` version with a retain on
+/// the source buffer, but that's rarely worth the complexity.
 ///
-/// Write side: `makeArrayBuffer` копирует `Data` в malloc'нутый буфер и
-/// отдаёт ownership JSC через `MakeArrayBufferWithBytesNoCopy` + free
-/// deallocator. ArrayBuffer живёт пока его держит JS; когда GC соберёт —
-/// JSC вызовет наш free.
+/// Write side: `makeArrayBuffer` copies `Data` into a malloc'd buffer and
+/// hands ownership to JSC via `MakeArrayBufferWithBytesNoCopy` + free
+/// deallocator. ArrayBuffer lives as long as JS holds it; when GC collects —
+/// JSC calls our free.
 @MainActor
 private func extractBinaryBytes(from value: JSValue) -> Data? {
     let ctx = value.context.jsGlobalContextRef
@@ -180,7 +180,7 @@ private func extractBinaryBytes(from value: JSValue) -> Data? {
         return Data(bytes: bytesPtr, count: length)
     }
     if kind != kJSTypedArrayTypeNone {
-        // Uint8Array / Int8Array / прочие views.
+        // Uint8Array / Int8Array / other views.
         guard let bytesPtr = JSObjectGetTypedArrayBytesPtr(ctx, ref, nil) else { return nil }
         let length = JSObjectGetTypedArrayByteLength(ctx, ref, nil)
         let offset = JSObjectGetTypedArrayByteOffset(ctx, ref, nil)

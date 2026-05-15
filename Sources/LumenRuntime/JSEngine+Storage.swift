@@ -6,13 +6,13 @@ extension JSEngine {
         guard let lumen = context.objectForKeyedSubscript("lumen") else { return }
         let storage = JSValue(newObjectIn: context)!
 
-        // Per-origin namespace. Две табы acme.com шарят keys через единый
-        // OriginContext; evil.com физически не видит наши ключи — у него
-        // свой prefix с другим origin-хешом.
+        // Per-origin namespace. Two tabs on acme.com share keys via a single
+        // OriginContext; evil.com physically can't see our keys — it has
+        // its own prefix with a different origin hash.
         let prefix = originContext.storagePrefix
         let originCtx = originContext
-        // Капчурим context для throwJS внутри set — strong, т.к. блок
-        // живёт в JSC и сам keep'ит context'у retained.
+        // Capture context for throwJS inside set — strong, since the block
+        // lives in JSC which keeps context retained anyway.
         let ctxRef = context
 
         let get: @convention(block) (String?) -> String? = { key in
@@ -24,10 +24,10 @@ extension JSEngine {
             guard let key, !key.isEmpty else { return }
             let storageKey = prefix + key
             if let value {
-                // Block 5: quota enforcement. Throw'аем JS-exception если
-                // запись превысит limit — апп получит обычный try/catch'абельный
-                // error. Не обрезаем втихую: апп должен явно знать что данные
-                // не сохранены.
+                // Block 5: quota enforcement. Throw a JS exception if
+                // the write would exceed the limit — app gets a regular try/catch-able
+                // error. Don't silently trim: the app must explicitly know the data
+                // was not saved.
                 let limit = MainActor.assumeIsolated { StorageQuota.limit(for: originCtx) }
                 if let reason = StorageQuota.denyReason(prefix: prefix,
                                                        keyWithPrefix: storageKey,

@@ -1,9 +1,9 @@
 import XCTest
 @testable import Lumen
 
-/// Покрывают PermissionStore (sticky decisions, per-origin isolation, revoke,
-/// clear). Prompt UI не тестируется здесь — UIAlertController требует
-/// presenting controller и интерактивного tap'а; покрывается вручную/UITests.
+/// Covers PermissionStore (sticky decisions, per-origin isolation, revoke,
+/// clear). The prompt UI is not tested here — UIAlertController requires
+/// a presenting controller and an interactive tap; covered manually / by UITests.
 @MainActor
 final class PermissionTests: XCTestCase {
 
@@ -12,8 +12,8 @@ final class PermissionTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        // Каждый тест на чистом state'е. UserDefaults — process-wide, между
-        // тестами может протекать; явный wipe ключей наших origin'ов.
+        // Each test on a clean state. UserDefaults is process-wide, may leak
+        // between tests; explicit wipe of our origins' keys.
         let store = PermissionStore.shared
         store.clear(origin: testOriginA)
         store.clear(origin: testOriginB)
@@ -44,7 +44,7 @@ final class PermissionTests: XCTestCase {
         store.set(origin: testOriginA, capability: .notifications, grant: .denied)
         XCTAssertEqual(store.status(origin: testOriginA, capability: .notifications), .denied)
 
-        // Не пересеклись с другими capabilities.
+        // Didn't bleed into other capabilities.
         XCTAssertEqual(store.status(origin: testOriginA, capability: .microphone), .prompt)
     }
 
@@ -70,7 +70,7 @@ final class PermissionTests: XCTestCase {
     }
 
     func testDifferentSchemesAreDifferentOrigins() {
-        // origin identity = scheme+host+port. http://a и https://a — разные.
+        // origin identity = scheme+host+port. http://a and https://a are different.
         let httpA  = Origin(scheme: "http",  host: "a.example.com")
         let httpsA = Origin(scheme: "https", host: "a.example.com")
 
@@ -83,7 +83,7 @@ final class PermissionTests: XCTestCase {
         store.set(origin: httpsA, capability: .location, grant: .granted)
         XCTAssertEqual(store.status(origin: httpsA, capability: .location), .granted)
         XCTAssertEqual(store.status(origin: httpA, capability: .location), .prompt,
-                       "http и https — разные origin'ы, grant не shared")
+                       "http and https are different origins, grant is not shared")
     }
 
     // MARK: - Revoke / clear
@@ -113,15 +113,15 @@ final class PermissionTests: XCTestCase {
             XCTAssertEqual(store.status(origin: testOriginA, capability: cap), .prompt,
                            "\(cap) on cleared origin = .prompt")
         }
-        // Другой origin не задело.
+        // Other origin untouched.
         XCTAssertEqual(store.status(origin: testOriginB, capability: .camera), .granted)
     }
 
     // MARK: - request() shortcuts when decision exists
 
-    /// request() для decided'ого capability возвращает grant СИНХРОННО без
-    /// показа UI. Тест не требует presenting controller'а — мы предзаписали
-    /// решение.
+    /// request() for a decided capability returns the grant SYNCHRONOUSLY without
+    /// showing UI. The test doesn't need a presenting controller — we've prewritten
+    /// the decision.
     func testRequestReturnsExistingGrantWithoutPrompt() async {
         let store = PermissionStore.shared
         store.set(origin: testOriginA, capability: .camera, grant: .granted)

@@ -1,7 +1,7 @@
 // ScrollLab — Vapor-style:
-// - StickyOverlay: thunks для opacity и текста (per-prop effects)
-// - Slot: динамический список карточек, кол-во меняется через signal,
-//   mount(App) НЕ пересобирается при изменении
+// - StickyOverlay: thunks for opacity and text (per-prop effects)
+// - Slot: dynamic list of cards, count changes via signal,
+//   mount(App) does NOT rebuild on change
 
 const tapped = signal<number | null>(null)
 const scrollOffset = signal(0)
@@ -14,13 +14,13 @@ lumen.bench.resetStats()
 
 function App() {
   return View({flex: 1, backgroundColor: '#0F0F12'},
-    // Scroll area: flex:1 + sticky overlay внутри (visual only)
+    // Scroll area: flex:1 + sticky overlay inside (visual only)
     View({flex: 1},
       Stage(),
       StickyOverlay(),
     ),
-    // AddRemoveBar — в flow ниже scroll'а. UIScrollView frame не покрывает
-    // эту область, таппы по Pressable доходят через GestureRouter.
+    // AddRemoveBar — in the flow below the scroll. UIScrollView frame doesn't cover
+    // this area, taps on Pressable reach it via GestureRouter.
     AddRemoveBar(),
   )
 }

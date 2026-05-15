@@ -1,14 +1,14 @@
-// Типизированный router поверх native `lumen.router.push`.
+// Typed router on top of native `lumen.router.push`.
 //
-// Зачем это, а не вызывать `lumen.router.push` напрямую:
-//   • Один типизированный список route'ов — IDE подскажет имена страниц
-//     и params, опечатка ловится в compile-time.
-//   • Страницы регистрируются в registry (см. `routes.ts`), а не импортятся
-//     везде — это разрывает циклические import'ы между page'ами:
+// Why this instead of calling `lumen.router.push` directly:
+//   • One typed list of routes — the IDE suggests page names
+//     and params, typos are caught at compile-time.
+//   • Pages register in a registry (see `routes.ts`) instead of being imported
+//     everywhere — this breaks circular imports between pages:
 //     home → openTransactions → transactions.ts; transactions → openHome
-//     ушло бы в круг.
-//   • Один helper `open(name, params)` — central point для аналитики,
-//     guard'ов (auth), и логирования навигации, когда понадобятся.
+//     would otherwise loop.
+//   • One `open(name, params)` helper — a central point for analytics,
+//     guards (auth), and navigation logging when needed.
 
 import { routes, type RouteName, type RouteParams } from '../routes'
 

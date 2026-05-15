@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// Paper-edition палитра из docs/browser-ui-mobile-paper.html.
-/// Warm paper background, ink text, vermilion/sage/gold акценты.
-/// Используется shell-chrome'ом (AddressBar, BrowserView) и теми
-/// lumen-fast-app'ами что хотят жить «в комнате» с браузером.
+/// Paper-edition palette from docs/browser-ui-mobile-paper.html.
+/// Warm paper background, ink text, vermilion/sage/gold accents.
+/// Used by the shell chrome (AddressBar, BrowserView) and by those
+/// lumen-fast-apps that want to live "in the room" with the browser.
 enum PaperPalette {
     // Background tones
     static let paper   = Color(hex: 0xF2EDE2)
@@ -26,7 +26,7 @@ enum PaperPalette {
     static let sage      = Color(hex: 0x4A6B5C)
     static let gold      = Color(hex: 0xC9963A)
 
-    // Glass overlay tones (background для blur-капсулы)
+    // Glass overlay tones (background for blur capsule)
     static let glassFillTop    = Color(red: 1, green: 0.992, blue: 0.961).opacity(0.85)
     static let glassFillBottom = Color(red: 1, green: 0.992, blue: 0.961).opacity(0.55)
     static let glassStroke     = Color.black.opacity(0.12)

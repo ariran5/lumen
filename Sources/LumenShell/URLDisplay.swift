@@ -1,9 +1,9 @@
 import Foundation
 
 extension URL {
-    /// `host:port` для UI-отображения. Возвращает чистый host если порт
-    /// дефолтный для схемы (URL.port = nil), иначе `host:port`.
-    /// Для lumen://history → `lumen://history` (тоже отображаем prefix).
+    /// `host:port` for UI display. Returns plain host if the port is
+    /// the scheme default (URL.port = nil), otherwise `host:port`.
+    /// For lumen://history → `lumen://history` (the prefix is shown too).
     var hostForDisplay: String {
         if scheme == "lumen", let h = host {
             return "lumen://\(h)"

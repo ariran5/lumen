@@ -1,18 +1,18 @@
 import Foundation
 import UIKit
 
-/// Модальный UIAlertController «<host> wants to <capability>». Однократный
-/// вопрос — ответ персистится `PermissionStore`'ом и больше не задаётся
-/// до явного `revoke`.
+/// Modal UIAlertController "<host> wants to <capability>". One-shot
+/// question — answer is persisted by `PermissionStore` and never asked again
+/// until explicit `revoke`.
 ///
-/// Не fast-app-рендереный — присентим через `TopViewController.find()`,
-/// поверх любого fast-app content'а, как system alert.
+/// Not fast-app-rendered — presented via `TopViewController.find()`,
+/// over any fast-app content, like a system alert.
 @MainActor
 enum PermissionPrompt {
 
-    /// Показывает alert и ждёт ответа. `.granted` если юзер тапнул Allow,
-    /// `.denied` иначе (включая swipe-to-dismiss и фоновое прерывание).
-    /// `.prompt` отсюда не выходит — это всегда decided answer.
+    /// Shows alert and awaits answer. `.granted` if user tapped Allow,
+    /// `.denied` otherwise (including swipe-to-dismiss and background interruption).
+    /// `.prompt` never returns from here — it's always a decided answer.
     static func show(origin: Origin, capability: Capability) async -> Grant {
         await withCheckedContinuation { (cont: CheckedContinuation<Grant, Never>) in
             present(origin: origin, capability: capability) { grant in
@@ -25,8 +25,8 @@ enum PermissionPrompt {
                                 capability: Capability,
                                 completion: @escaping (Grant) -> Void) {
         guard let host = TopViewController.find() else {
-            // Без presenting controller'а вернуть denied как safest default.
-            // Шансов что это произойдёт мало — fast-app живёт под VC'эхой.
+            // Without a presenting controller return denied as the safest default.
+            // Unlikely to happen — fast-app lives under a VC.
             completion(.denied)
             return
         }
@@ -34,8 +34,8 @@ enum PermissionPrompt {
         let title = "\(origin.host) wants to \(capability.displayName)"
         let alert = UIAlertController(title: title, message: nil, preferredStyle: .alert)
 
-        // Allow первой кнопкой — но не дефолтной. Дефолтная (highlighted) —
-        // Don't Allow: давит на «осторожный» путь при случайном Enter'е.
+        // Allow as the first button — but not the default. Default (highlighted) —
+        // Don't Allow: nudges toward the "cautious" path on accidental Enter.
         alert.addAction(UIAlertAction(title: "Allow", style: .default) { _ in
             completion(.granted)
         })

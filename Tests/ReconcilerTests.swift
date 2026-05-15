@@ -109,7 +109,7 @@ final class ReconcilerTests: XCTestCase {
     }
 
     func testVirtualListKindParses() {
-        // Базовый smoke: парсер видит kind=.virtualList и заполняет поля.
+        // Basic smoke: parser sees kind=.virtualList and fills the fields.
         var n = RenderNode()
         n.kind = .virtualList
         n.listCount = 42
@@ -121,8 +121,8 @@ final class ReconcilerTests: XCTestCase {
     }
 
     func testVirtualListWithoutHostViewIsNoop() {
-        // Без hostView (rootLayer-only init) virtualList безопасно ничего не
-        // монтирует. mountedRoot создаётся, layer добавляется, sublayers не падают.
+        // Without hostView (rootLayer-only init) virtualList safely mounts
+        // nothing. mountedRoot is created, layer is added, sublayers don't crash.
         let root = makeRoot()
         let renderer = Renderer(rootLayer: root)
 
@@ -134,13 +134,13 @@ final class ReconcilerTests: XCTestCase {
 
         renderer.render(viewNode(children: [list]))
 
-        // Wrapper view замонтирован, внутри placeholder CALayer для virtualList.
+        // Wrapper view is mounted, inside is a placeholder CALayer for virtualList.
         XCTAssertEqual(root.sublayers?.count, 1)
         XCTAssertEqual(root.sublayers?.first?.sublayers?.count, 1)
     }
 
     func testReconcileLargeTreeBudget() {
-        // 1000 nodes, 5 deltas. Целевой бюджет — 2ms на симуляторе.
+        // 1000 nodes, 5 deltas. Target budget — 2ms on simulator.
         let root = makeRoot()
         let renderer = Renderer(rootLayer: root)
 
@@ -150,7 +150,7 @@ final class ReconcilerTests: XCTestCase {
                 var n = RenderNode()
                 n.kind = .view
                 n.style.flex.height = .points(2)
-                // меняем opacity только для 5 первых на втором проходе
+                // change opacity only for the first 5 on the second pass
                 n.style.opacity = (i < 5) ? opacity : 1
                 children.append(n)
             }
@@ -168,9 +168,9 @@ final class ReconcilerTests: XCTestCase {
 
         print("[reconciler] initial mount = \(firstMs)ms, update = \(secondMs)ms")
 
-        // Дельта-апдейт обязан быть быстрее инициальной сборки.
+        // Delta update must be faster than the initial mount.
         XCTAssertLessThan(secondMs, firstMs, "update faster than fresh mount")
-        // Sanity: на симуляторе iPhone 17 Pro ~< 10ms; реально ожидаем < 3ms.
+        // Sanity: on the iPhone 17 Pro simulator ~< 10ms; realistically expect < 3ms.
         XCTAssertLessThan(secondMs, 10.0, "update budget < 10ms on sim")
     }
 }

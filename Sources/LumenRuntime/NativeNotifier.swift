@@ -1,14 +1,14 @@
 import Foundation
 
-/// Push-канал из Swift в JS. Любой native-store (HistoryStore, TabsStore, ...)
-/// после мутации делает `NativeNotifier.shared.fire("history")`, и все
-/// зарегистрированные JS-callback'и во всех живых JSEngine получают вызов.
+/// Push channel from Swift to JS. Any native store (HistoryStore, TabsStore, ...)
+/// after mutation calls `NativeNotifier.shared.fire("history")`, and all
+/// registered JS callbacks across all live JSEngines get invoked.
 ///
-/// Это бэкбон native-side реактивности: source-of-truth живёт в Swift,
-/// JS подписывается через `lumen._notify.subscribe(channel, fn)` (см.
-/// `JSEngine+Notify.swift`). На JS-стороне callback обычно делает
-/// `signal.value = lumen.X.list()` — и Vapor effect'ы перерисовывают
-/// конкретные слоты.
+/// This is the backbone of native-side reactivity: source-of-truth lives in Swift,
+/// JS subscribes via `lumen._notify.subscribe(channel, fn)` (see
+/// `JSEngine+Notify.swift`). On the JS side callback typically does
+/// `signal.value = lumen.X.list()` — and Vapor effects re-render
+/// specific slots.
 @MainActor
 final class NativeNotifier {
     static let shared = NativeNotifier()

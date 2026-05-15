@@ -2,8 +2,8 @@ import Foundation
 import JavaScriptCore
 
 extension JSEngine {
-    /// JS-side AnimatedValue в CoreFramework общается с native через `lumen._animValue.*`.
-    /// Это приватный API — пользователи берут `animated(initial)` builder.
+    /// JS-side AnimatedValue in CoreFramework talks to native via `lumen._animValue.*`.
+    /// This is a private API — users use the `animated(initial)` builder.
     func installAnimationBridge() {
         guard let lumen = context.objectForKeyedSubscript("lumen"),
               let animNS = JSValue(newObjectIn: context) else { return }

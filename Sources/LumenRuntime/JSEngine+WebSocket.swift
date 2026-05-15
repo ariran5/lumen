@@ -3,9 +3,9 @@ import Foundation
 
 /// `lumen.ws(url, {onOpen, onMessage, onClose, onError})` → `{send, close}`.
 ///
-/// Тонкая обёртка над `URLSessionWebSocketTask` с recursive `receive` loop'ом.
-/// Не пытаемся следовать WHATWG `WebSocket` стандарту — для совместимости с
-/// npm-либами (когда появится bundler) добавим shim в JS-runtime отдельно.
+/// Thin wrapper over `URLSessionWebSocketTask` with a recursive `receive` loop.
+/// Don't attempt to follow the WHATWG `WebSocket` standard — for compatibility
+/// with npm libs (once we have a bundler) we'll add a shim in the JS runtime separately.
 extension JSEngine {
     func installWebSocketBridge() {
         guard let lumen = context.objectForKeyedSubscript("lumen") else { return }
@@ -21,8 +21,8 @@ extension JSEngine {
                 let onClose   = nonUndefined(callbacks?.objectForKeyedSubscript("onClose"))
                 let onError   = nonUndefined(callbacks?.objectForKeyedSubscript("onError"))
 
-                // Sandbox network policy. WS handshake — single round-trip,
-                // редиректов не следует, поэтому проверки на connect достаточно.
+                // Sandbox network policy. WS handshake is a single round-trip,
+                // doesn't follow redirects, so a connect-time check is enough.
                 guard engine.originContext.networkPolicy.allows(url: url) else {
                     let msg = "ws: blocked by sandbox — '\(url.host ?? "")' is not in this app's `connect` allowlist"
                     if let onError {
@@ -86,10 +86,10 @@ private final class WebSocketBridge {
         self.task.resume()
         WebSocketBridge.alive[ObjectIdentifier(self)] = self
 
-        // onOpen фактически не привязан к WS-handshake (URLSessionWebSocketTask
-        // не даёт onOpen-делегата), фаерим в next runloop tick — к этому моменту
-        // task точно запущен. Если handshake провалится, receive loop поймает
-        // ошибку и дёрнет onError.
+        // onOpen isn't actually tied to the WS handshake (URLSessionWebSocketTask
+        // doesn't give an onOpen delegate), fire it next runloop tick — by then
+        // the task is definitely running. If handshake fails, receive loop catches
+        // the error and fires onError.
         DispatchQueue.main.async { [weak self] in
             self?.startReceive()
             if let onOpen = self?.onOpen { _ = onOpen.call(withArguments: []) }

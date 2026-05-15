@@ -1,14 +1,14 @@
-// App root. Mount-effect рендерит активный таб + tab-bar.
+// App root. Mount-effect renders the active tab + tab-bar.
 //
-// Архитектура top-level навигации:
-//   • 4 tab'а — переключение через `activeTab.value = ...` (signal,
-//     module-level в state/ui.ts), root перерендеривает выбранный
-//     page-factory'ем.
-//   • Sub-страницы пушатся через `lumen.router.push` (см. lib/router.ts +
-//     routes.ts) — на iOS они закрывают tab-bar visually, и swipe-from-edge
-//     возвращает обратно.
-//   • Action flows (Send / Deposit / Tx preview / Card actions) — bottom-sheet'ы,
-//     не пушатся в стек.
+// Top-level navigation architecture:
+//   • 4 tabs — switching via `activeTab.value = ...` (signal,
+//     module-level in state/ui.ts), root re-renders via the selected
+//     page-factory.
+//   • Sub-pages are pushed via `lumen.router.push` (see lib/router.ts +
+//     routes.ts) — on iOS they visually hide the tab-bar, and swipe-from-edge
+//     returns back.
+//   • Action flows (Send / Deposit / Tx preview / Card actions) are bottom-sheets,
+//     not pushed onto the stack.
 
 import { TabBar } from './components/tab-bar'
 import { colors } from './lib/colors'
@@ -18,9 +18,9 @@ import { transactionsPage } from './pages/transactions'
 import { cardsPage } from './pages/cards'
 import { profilePage } from './pages/profile'
 
-// Mapping таб → page-factory. Каждый key пересоздаёт page при свитче —
-// дешёво, ничего не теряется кроме per-tab локального state'а (если он
-// есть, поднимай в state/* модули как делает account/transactions).
+// Mapping tab → page-factory. Each key recreates the page on switch —
+// cheap, nothing is lost except per-tab local state (if any —
+// lift it into state/* modules like account/transactions does).
 const tabFactories: { [K in TabKey]: () => { render: () => RenderNode } } = {
   home: homePage,
   history: transactionsPage,
@@ -33,13 +33,13 @@ import { sheetOpen } from './state/ui'
 mount(() => View(
   { flex: 1, backgroundColor: colors.bg },
 
-  // Slot оборачивает tab content — при смене activeTab ребилдится ТОЛЬКО
-  // этот subtree, root-mount-effect (`mount(...)`) сам не реран.
+  // Slot wraps the tab content — when activeTab changes only THIS subtree
+  // rebuilds, the root-mount-effect (`mount(...)`) doesn't re-run.
   Slot({ flex: 1 }, () => tabFactories[activeTab.value]().render()),
 
-  // Glass tab-bar поверх контента. Position 'absolute' внутри bar'а
-  // самого — gradient/translucency видны над scroll'ом. Прячем когда
-  // открыт sheet — иначе на iOS 26 (floating sheet at medium detent)
-  // tab-bar торчит из-под sheet'а в нижнем margin'е.
+  // Glass tab-bar over the content. Position 'absolute' inside the bar
+  // itself — gradient/translucency show over the scroll. Hide when
+  // a sheet is open — otherwise on iOS 26 (floating sheet at medium detent)
+  // the tab-bar pokes out from under the sheet in the bottom margin.
   Slot({}, () => sheetOpen.value ? null : TabBar()),
 ))

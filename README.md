@@ -57,7 +57,6 @@
 ├── tools/
 │   └── dev-server.ts                 shim: `bun tools/dev-server.ts <path> <port>`
 ├── docs/                      IDEA / PLAN / ROADMAP + UI prototypes
-├── sessions/                  Журнал работ (один .md за смену)
 ├── project.yml                xcodegen spec — источник истины
 └── Lumen.xcodeproj            генерируется из project.yml
 ```
@@ -123,7 +122,7 @@ bun tools/dev-server.ts Examples/HelloApp 8080
 
 Сервер раздаёт файлы, on-the-fly транспилит `.ts/.tsx` через `Bun.Transpiler`, и пушит `reload` по WebSocket при изменениях (HMR).
 
-В `BrowserView.swift` на стартовой странице список встроенных примеров с адресами вида `http://192.168.0.107:80XX` — поправь IP под свою сеть.
+В `BrowserView.swift` на стартовой странице список встроенных примеров с адресами вида `http://127.0.0.1:80XX` (работает в симуляторе из коробки). Для запуска с физического устройства замени `127.0.0.1` на LAN-IP машины в той же Wi-Fi сети.
 
 ### Свой fast-app
 
@@ -177,6 +176,3 @@ xcodebuild test -scheme Lumen \
 - **Sandbox-модель**: per-origin storage / keychain / FS / network policy. Origin = scheme+host+port. Default-deny на cross-origin fetch'и, манифест может расширить через `connect`.
 - **Bottom sheet** — UIKit `UISheetPresentationController`. Glass/Liquid Glass на iOS 26 — нативный, через `UIGlassEffect`. Контент в sheet'е рендерится через nested Renderer, layout фиксируется на medium-detent bounds (см. `BottomSheetViewController.swift`).
 
-## Журнал работ
-
-`sessions/NNN-YYYY-MM-DD-topic.md` — снепшоты решений по дням. Если копаешься в чём-то странном — поищи там; часто там объяснение «почему так» вместо «как».

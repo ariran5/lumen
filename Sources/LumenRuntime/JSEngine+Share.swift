@@ -2,9 +2,9 @@ import Foundation
 import JavaScriptCore
 import UIKit
 
-/// `lumen.share({text, url})` — стандартный iOS share sheet через
-/// `UIActivityViewController`. Принимает любую комбинацию text/url.
-/// На iPad popover anchor по центру экрана (через arrowDirections=[]).
+/// `lumen.share({text, url})` — standard iOS share sheet via
+/// `UIActivityViewController`. Accepts any combination of text/url.
+/// On iPad popover anchor is screen-centered (via arrowDirections=[]).
 extension JSEngine {
     func installShareBridge() {
         guard let lumen = context.objectForKeyedSubscript("lumen") else { return }

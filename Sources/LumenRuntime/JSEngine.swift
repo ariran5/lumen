@@ -5,10 +5,10 @@ import JavaScriptCore
 final class JSEngine {
     let context: JSContext
 
-    /// Origin контекст этого engine'а — основа sandbox-изоляции.
-    /// Storage/Keychain/FS bridges берут отсюда namespace. Дедуплицируется
-    /// между табами одного сайта через `OriginContextRegistry`, поэтому
-    /// permission/storage решения видны во всех табах того же origin.
+    /// Origin context of this engine — basis of sandbox isolation.
+    /// Storage/Keychain/FS bridges get their namespace from here. Deduplicated
+    /// across tabs of the same site via `OriginContextRegistry`, so
+    /// permission/storage decisions are visible in all tabs of the same origin.
     let originContext: OriginContext
 
     var origin: Origin { originContext.origin }
@@ -27,9 +27,9 @@ final class JSEngine {
 
     private var lastException: String?
 
-    // Native→JS push-канал. Каждый канал — массив `(id, managed callback)`.
-    // JSManagedValue нужен чтобы JSC GC мог собрать callback когда движок
-    // умер; обычный JSValue даст retain-cycle JS↔Swift.
+    // Native→JS push channel. Each channel is an array `(id, managed callback)`.
+    // JSManagedValue is needed so JSC GC can collect the callback when the engine
+    // dies; plain JSValue would create a retain cycle JS↔Swift.
     var notifyListeners: [String: [(Int, JSManagedValue)]] = [:]
     private var nextListenerID: Int = 0
 
@@ -54,9 +54,9 @@ final class JSEngine {
         #endif
     }
 
-    /// Прокинуть манифест в OriginContext. Должно быть вызвано ДО eval'а
-    /// bundle.script'а, чтобы network policy / declared permissions были
-    /// применены к моменту первого fetch'а из user-кода.
+    /// Pass the manifest into OriginContext. Must be called BEFORE eval'ing
+    /// bundle.script so network policy / declared permissions are
+    /// applied by the time of the first fetch from user code.
     func applyManifest(_ manifest: LumenManifest) {
         originContext.applyManifest(manifest)
     }

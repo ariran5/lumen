@@ -1,13 +1,13 @@
 import Foundation
 import JavaScriptCore
 
-/// `lumen.tabs.*` API для fast-app'ов. Доступен через TabsStore.shared
-/// (browser-wide singleton). Каждый engine знает свой `ownTabID` — он
-/// используется как дефолт в `.close()` (закрыть собственную табу).
+/// `lumen.tabs.*` API for fast-apps. Available via TabsStore.shared
+/// (browser-wide singleton). Each engine knows its `ownTabID` — used
+/// as default for `.close()` (close own tab).
 ///
-/// Bridge возвращает JSON-строки для сложных объектов: Swift 6 strict
-/// concurrency не пропускает `[String: Any]` / JSValue как Sendable
-/// return type. CoreFramework оборачивает в lumen.tabs.* парся JSON.
+/// Bridge returns JSON strings for complex objects: Swift 6 strict
+/// concurrency rejects `[String: Any]` / JSValue as a Sendable
+/// return type. CoreFramework wraps lumen.tabs.* by parsing JSON.
 extension JSEngine {
     func installTabsBridge(ownTabID: UUID) {
         guard let lumen = context.objectForKeyedSubscript("lumen"),
@@ -51,13 +51,13 @@ extension JSEngine {
         }
         tabsNS.setObject(open, forKeyedSubscript: "open" as NSString)
 
-        // navigate(url) — навигация СВОЕЙ табы (не открывает новую).
-        // Используется встроенным lumen://home для пинов / recent клика.
-        // Fallback на activeTab нужен для embedded'ового sheet home —
-        // там JSEngine принадлежит SheetHome.tab, который НЕ в
-        // TabsStore.shared.tabs (это отдельный шелл-only TabModel),
-        // и user'овский клик по пину должен навигировать ту таб'у
-        // под sheet'ом, на которую юзер смотрит.
+        // navigate(url) — navigate OWN tab (doesn't open a new one).
+        // Used by built-in lumen://home for pin / recent taps.
+        // Fallback to activeTab is needed for the embedded sheet home —
+        // there the JSEngine belongs to SheetHome.tab, which is NOT in
+        // TabsStore.shared.tabs (it's a separate shell-only TabModel),
+        // and a user pin tap should navigate the tab
+        // under the sheet that the user is looking at.
         let navigate: @convention(block) (String) -> Void = { url in
             MainActor.assumeIsolated {
                 let target = TabsStore.shared.tabs.first(where: { $0.id.uuidString == ownIDString })

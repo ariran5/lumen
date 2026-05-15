@@ -23,8 +23,8 @@ struct ViewStyle {
     var transform: Transform = Transform()
 
     /// True if any transform component or opacity is bound to an AnimatedValue.
-    /// Renderer использует это чтобы решить, делегировать ли apply в
-    /// AnimationManager или применять статически как раньше.
+    /// Renderer uses this to decide whether to delegate apply to
+    /// AnimationManager or apply statically as before.
     var hasAnimBindings: Bool {
         opacityAnimId != nil ||
         transform.translateXAnimId != nil ||
@@ -44,9 +44,9 @@ struct Transform: Equatable {
     var scaleY: Double = 1
     var rotate: Double = 0   // radians
 
-    // animId, не nil — соответствующее поле взято из AnimatedValue, а не
-    // из статического числа. Renderer передаёт это в AnimationManager,
-    // composedTransform на native читает current value по этим id.
+    // animId, non-nil — the corresponding field is taken from AnimatedValue, not
+    // from a static number. Renderer passes this to AnimationManager,
+    // composedTransform on native reads current value by these ids.
     var translateXAnimId: Int?
     var translateYAnimId: Int?
     var scaleAnimId: Int?

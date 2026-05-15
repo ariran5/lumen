@@ -1,18 +1,64 @@
-// Home / dashboard. Hero card с балансом + quick-action row (Send/Deposit
-// открывают bottom-sheet'ы, не push'ат страницу — экшены модальные, чтобы
-// не выбрасывать юзера из контекста). Tap по recent tx row → preview sheet
-// с кнопкой «View full details» которая уже пушит full detail.
+// Home / "Главная" — analog of T-Bank's start screen.
+//
+// Skeleton:
+//   ┌────────────────────────────────────────────────────────┐
+//   │ Avatar    Name                         🔔   🔍         │  ← Header
+//   │                                                        │
+//   │   2 478 920 ₽                                          │  ← Total assets
+//   │   All money · tap to hide                              │
+//   │                                                        │
+//   │  ◯ ◯ ◯ ◯ ◯                                             │  ← Stories rail
+//   │  Cash Rate Gift Travel +N                              │
+//   │                                                        │
+//   │ ┌── Payments & transfers ─────────────────────────────┐│  ← Services grid
+//   │ │ [📲] [💳] [⊞] [⬇]                                   ││
+//   │ │ [📞] [🏛️] [🛫] [⋯]                                   ││
+//   │ └─────────────────────────────────────────────────────┘│
+//   │                                                        │
+//   │ My accounts                                            │  ← Cards section
+//   │ ⬛ Tinkoff Black ·· 4422             241 850 ₽         │
+//   │ ◾ Platinum (credit) ·· 7781               0 ₽         │
+//   │ ✈️  All Airlines ·· 0290             12 450 ₽          │
+//   │ ＋ Open new card                                       │
+//   │                                                        │
+//   │ Savings                                                │  ← Savings section
+//   │ 🏝️ Vacation             138 400 ₽ · 55%               │
+//   │ 🪙 Cushion              412 300 ₽ · 16% APR            │
+//   │                                                        │
+//   │ Investments                                            │  ← Invest section
+//   │ 📈 Brokerage           1 286 540 ₽ · +8,4% YTD         │
+//   │                                                        │
+//   │ ┌── 🔥 May cashback ──────────────────────────────────┐│  ← Promo banner
+//   │ │ 5% restaurants, 5% taxi, 3% gas                     ││
+//   │ │ Activate →                                          ││
+//   │ └─────────────────────────────────────────────────────┘│
+//   │                                                        │
+//   │ Recent activity              All →                     │  ← Tx list
+//   │ ☕ Skuratov Coffee · Cafe          −320 ₽              │
+//   │ 🛒 Pyaterochka · Supermarkets    −1 579 ₽              │
+//   │ ...                                                    │
+//   └────────────────────────────────────────────────────────┘
+//
+// Reactivity: module-level signals (balanceCents / cards / savings /
+// transactions) are already shared between pages. Slot wraps each
+// dynamic section so that changing one array doesn't rebuild
+// the whole home.
 
-import { GlassCard } from '../components/glass-card'
-import { Amount } from '../components/amount'
 import { colors, radius, space } from '../lib/colors'
-import { money } from '../lib/format'
-import { account, balanceCents } from '../state/account'
-import { monthIncome, monthSpending, transactions } from '../state/transactions'
+import { money, moneyShort } from '../lib/format'
+import { Avatar } from '../components/avatar'
+import { StoryRail } from '../components/story-rail'
+import { ServicesGrid } from '../components/services-grid'
+import { AccountRow } from '../components/account-row'
+import { PromoBanner } from '../components/promo-banner'
+import { account } from '../state/account'
+import { cards, savings, investments, totalAssetsCents, type AccountItem } from '../state/accounts'
+import { transactions, type Tx } from '../state/transactions'
 import { TAB_BAR_HEIGHT, activeTab } from '../state/ui'
-import { openSendSheet } from '../sheets/send'
-import { openDepositSheet } from '../sheets/deposit'
 import { openTxPreviewSheet } from '../sheets/tx-preview'
+
+/** Whether the total balance is hidden — toggled by tapping on the amount. Local to the page. */
+const balanceHidden = signal(false)
 
 export function homePage() {
   return {
@@ -24,134 +70,314 @@ function renderHome(): RenderNode {
   return View(
     { flex: 1, backgroundColor: colors.bg },
 
-    // Greeting bar — заменяет «Header» компонент, потому что top tab-page
-    // не нужен title + back. Большие свободные поля сверху делают
-    // визуальное «дыхание», как в современных банковских apps.
-    View(
-      {
-        paddingTop: lumen.safeArea.top + space.md,
-        paddingBottom: space.md,
-        paddingLeft: space.lg, paddingRight: space.lg,
-      },
-      Text({ fontSize: 13, color: colors.textTertiary, fontWeight: '500' }, 'Welcome back,'),
-      Text({ fontSize: 22, fontWeight: '700', color: colors.textPrimary }, () => account.value.holderName.split(' ')[0]!),
-    ),
+    headerBar(),
 
     ScrollView(
       {
         flex: 1,
-        paddingBottom: TAB_BAR_HEIGHT + Math.max(lumen.safeArea.bottom, space.lg) + space.xl,
-        paddingLeft: space.lg, paddingRight: space.lg,
+        paddingBottom: TAB_BAR_HEIGHT + Math.max(lumen.safeArea.bottom, space.lg) + space.xxl,
         gap: space.lg,
       },
-      heroCard(),
-      actionGrid(),
-      monthSummary(),
+      totalCapital(),
+      StoryRail(),
+      paymentsSection(),
+      cardsSection(),
+      savingsSection(),
+      investSection(),
+      promoSection(),
       recentSection(),
     ),
   )
 }
 
-function heroCard(): RenderNode {
+// ─────────────────────────────────────────────────────────────────
+// Header
+
+function headerBar(): RenderNode {
   return View(
     {
-      backgroundColor: colors.accent,
-      borderRadius: radius.card,
-      padding: space.xl,
+      flexDirection: 'row',
+      alignItems: 'center',
       gap: space.md,
+      paddingTop: lumen.safeArea.top + space.sm,
+      paddingBottom: space.md,
+      paddingLeft: space.lg,
+      paddingRight: space.lg,
     },
-    Text({ fontSize: 13, fontWeight: '500', color: '#FFFFFFB0' }, () => 'CARD · •••• ' + account.value.cardLast4),
-    Text(
-      { fontSize: 34, fontWeight: '800', color: colors.textPrimary },
-      () => money(balanceCents.value),
+    Avatar({
+      name: account.peek().holderName,
+      size: 40,
+      onTap: () => { activeTab.value = 'profile' },
+    }),
+    View(
+      { flex: 1 },
+      Text({ fontSize: 11, color: colors.textTertiary, fontWeight: '500' }, 'Привет,'),
+      Text(
+        { fontSize: 16, fontWeight: '700', color: colors.textPrimary, numberOfLines: 1 },
+        () => account.value.holderName.split(' ')[0]!,
+      ),
     ),
-    Text({ fontSize: 13, color: '#FFFFFFB0' }, () => account.value.holderName),
+    iconButton('🔔', () => lumen.alert({
+      title: 'Уведомления',
+      message: 'Пока тихо: всё прочитано.',
+    })),
+    iconButton('🔍', () => lumen.alert({
+      title: 'Поиск',
+      message: 'Поиск по операциям, счетам и платежам — в разработке.',
+    })),
   )
 }
 
-function actionGrid(): RenderNode {
-  return View(
-    { flexDirection: 'row', gap: space.md },
-    actionTile('↗', 'Send', openSendSheet),
-    actionTile('⬇', 'Deposit', openDepositSheet),
-    actionTile('≡', 'History', () => { activeTab.value = 'history' }),
-  )
-}
-
-function actionTile(icon: string, label: string, onTap: () => void): RenderNode {
+function iconButton(icon: string, onTap: () => void): RenderNode {
   return Pressable(
     {
-      onTap: () => { lumen.haptics('light'); onTap() },
-      flex: 1,
-      paddingTop: space.lg, paddingBottom: space.lg,
-      borderRadius: radius.card,
-      backgroundColor: colors.surface,
-      borderWidth: 1, borderColor: colors.border,
-      alignItems: 'center', gap: space.sm,
+      onTap: () => { lumen.haptics('soft'); onTap() },
+      width: 38, height: 38, borderRadius: 19,
+      backgroundColor: colors.surfaceElevated,
+      alignItems: 'center', justifyContent: 'center',
     },
-    Text({ fontSize: 22, color: colors.textPrimary }, icon),
-    Text({ fontSize: 13, fontWeight: '600', color: colors.textPrimary }, label),
+    Text({ fontSize: 17, color: colors.textPrimary }, icon),
   )
 }
 
-function monthSummary(): RenderNode {
-  return GlassCard(
-    {},
-    Text({ fontSize: 12, color: colors.textTertiary, fontWeight: '600' }, 'THIS MONTH'),
-    View(
-      { flexDirection: 'row', gap: space.lg },
-      summaryColumn('Income', () => monthIncome.value),
-      summaryColumn('Spending', () => monthSpending.value),
+// ─────────────────────────────────────────────────────────────────
+// Total capital — large "header-amount" in T-Bank style
+
+function totalCapital(): RenderNode {
+  return Pressable(
+    {
+      onTap: () => {
+        lumen.haptics('soft')
+        balanceHidden.value = !balanceHidden.peek()
+      },
+      paddingLeft: space.lg, paddingRight: space.lg,
+      paddingTop: space.xs,
+      gap: 2,
+    },
+    Text(
+      { fontSize: 34, fontWeight: '800', color: colors.textPrimary },
+      () => balanceHidden.value ? '••••••••' : moneyShort(totalAssetsCents.value),
+    ),
+    Text(
+      { fontSize: 12, color: colors.textTertiary, fontWeight: '500' },
+      () => balanceHidden.value ? 'Нажмите, чтобы показать' : 'Все деньги · нажмите, чтобы скрыть',
     ),
   )
 }
 
-function summaryColumn(label: string, cents: Thunk<number>): RenderNode {
+// ─────────────────────────────────────────────────────────────────
+// Payments & transfers
+
+function paymentsSection(): RenderNode {
   return View(
-    { flex: 1, gap: space.xs },
-    Text({ fontSize: 13, color: colors.textSecondary }, label),
-    Amount({ cents, size: 20, weight: '700' }),
+    { paddingLeft: space.lg, paddingRight: space.lg, gap: space.sm },
+    sectionHeader('Платежи и переводы', null),
+    ServicesGrid(),
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Cards / Savings / Invest — single template for account sections
+
+/** Inset-divider: 1pt gray line with a left inset under the row icon.
+ *  Lumen-flex doesn't know about margin, so we build a row from a spacer + a bar. */
+function divider(insetLeft: number): RenderNode {
+  return View(
+    { flexDirection: 'row', height: 1 },
+    View({ width: insetLeft }),
+    View({ flex: 1, height: 1, backgroundColor: colors.divider }),
+  )
+}
+
+function accountsCard(items: () => AccountItem[], extra?: RenderNode | null): RenderNode {
+  return View(
+    {
+      backgroundColor: colors.surface,
+      borderRadius: radius.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: space.xs,
+      gap: 0,
+    },
+    Slot({ gap: 0 }, () => {
+      const list = items()
+      const visible = list.filter(a => !a.hidden)
+      const rows: RenderNode[] = []
+      for (let i = 0; i < visible.length; i++) {
+        rows.push(AccountRow(visible[i]))
+        if (i < visible.length - 1) {
+          rows.push(divider(44 + space.md + space.md))
+        }
+      }
+      return rows
+    }),
+    extra ?? null,
+  )
+}
+
+function cardsSection(): RenderNode {
+  return View(
+    { paddingLeft: space.lg, paddingRight: space.lg, gap: space.sm },
+    sectionHeader('Мои карты', null),
+    accountsCard(
+      () => cards.value,
+      addRow('＋', 'Открыть новую карту', () =>
+        lumen.alert({ title: 'Новая карта', message: 'Выбор продукта в разработке.' }),
+      ),
+    ),
+  )
+}
+
+function savingsSection(): RenderNode {
+  return View(
+    { paddingLeft: space.lg, paddingRight: space.lg, gap: space.sm },
+    sectionHeader('Накопления', null),
+    accountsCard(
+      () => savings.value,
+      addRow('🎯', 'Создать цель', () =>
+        lumen.alert({ title: 'Новая цель', message: 'Постановка финансовой цели — в разработке.' }),
+      ),
+    ),
+  )
+}
+
+function investSection(): RenderNode {
+  return View(
+    { paddingLeft: space.lg, paddingRight: space.lg, gap: space.sm },
+    sectionHeader('Инвестиции', 'История'),
+    accountsCard(() => investments.value),
+  )
+}
+
+function addRow(icon: string, label: string, onTap: () => void): RenderNode {
+  return Pressable(
+    {
+      onTap: () => { lumen.haptics('soft'); onTap() },
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: space.md,
+      paddingTop: space.md, paddingBottom: space.md,
+      paddingLeft: space.md, paddingRight: space.md,
+      borderRadius: radius.control,
+    },
+    View(
+      {
+        width: 44, height: 44, borderRadius: 22,
+        backgroundColor: colors.surfaceElevated,
+        alignItems: 'center', justifyContent: 'center',
+      },
+      Text({ fontSize: 20, color: colors.accent }, icon),
+    ),
+    Text(
+      { flex: 1, fontSize: 14, fontWeight: '600', color: colors.accent },
+      label,
+    ),
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Section header + promo + recent
+
+function sectionHeader(title: string, link: string | null): RenderNode {
+  return View(
+    { flexDirection: 'row', alignItems: 'center', paddingLeft: space.xs, paddingTop: space.xs },
+    Text(
+      { flex: 1, fontSize: 18, fontWeight: '700', color: colors.textPrimary },
+      title,
+    ),
+    link
+      ? Pressable(
+          {
+            onTap: () => { lumen.haptics('soft'); activeTab.value = 'history' },
+            paddingTop: space.xs, paddingBottom: space.xs,
+            paddingLeft: space.sm, paddingRight: space.sm,
+          },
+          Text({ fontSize: 13, color: colors.textSecondary, fontWeight: '600' }, link + ' →'),
+        )
+      : null,
+  )
+}
+
+function promoSection(): RenderNode {
+  return View(
+    { paddingLeft: space.lg, paddingRight: space.lg, gap: space.md },
+    PromoBanner({
+      title: 'Кэшбэк мая',
+      subtitle: '5% на рестораны и такси, 3% на АЗС. До 5 000 ₽ за месяц.',
+      cta: 'Подключить',
+      icon: '🔥',
+    }),
+    PromoBanner({
+      title: 'Tinkoff Pro',
+      subtitle: 'Подписка с повышенным кэшбэком, бесплатными переводами и страховкой покупок.',
+      cta: 'Попробовать 60 дней',
+      icon: '⭐',
+      bg: colors.surface,
+      fg: colors.textPrimary,
+    }),
   )
 }
 
 function recentSection(): RenderNode {
-  return GlassCard(
-    { padding: space.md, gap: space.xs },
+  return View(
+    { paddingLeft: space.lg, paddingRight: space.lg, gap: space.sm },
+    sectionHeader('Последние операции', 'Все'),
     View(
-      { flexDirection: 'row', alignItems: 'center', paddingLeft: space.md, paddingRight: space.md, paddingTop: space.sm },
-      Text({ flex: 1, fontSize: 12, color: colors.textTertiary, fontWeight: '600' }, 'RECENT'),
-      Pressable(
-        { onTap: () => { activeTab.value = 'history' }, paddingTop: space.xs, paddingBottom: space.xs },
-        Text({ fontSize: 13, color: colors.accentHi, fontWeight: '600' }, 'See all →'),
-      ),
+      {
+        backgroundColor: colors.surface,
+        borderRadius: radius.card,
+        borderWidth: 1,
+        borderColor: colors.border,
+        padding: space.xs,
+        gap: 0,
+      },
+      Slot({ gap: 0 }, () => {
+        const list = transactions.value.slice(0, 6)
+        const rows: RenderNode[] = []
+        for (let i = 0; i < list.length; i++) {
+          rows.push(txRow(list[i]!))
+          if (i < list.length - 1) {
+            rows.push(divider(44 + space.md + space.md))
+          }
+        }
+        return rows
+      }),
     ),
-    Slot({ gap: 0 }, () => transactions.value.slice(0, 5).map(t =>
-      Pressable(
-        {
-          key: 'home-tx-' + t.id,
-          // Quick-preview sheet вместо push — для home показываем lightweight
-          // прехват; в History/Cards эта же row может пушить full detail.
-          onTap: () => { lumen.haptics('soft'); openTxPreviewSheet(t.id) },
-          flexDirection: 'row', alignItems: 'center', gap: space.md,
-          paddingTop: space.md, paddingBottom: space.md,
-          paddingLeft: space.md, paddingRight: space.md,
-          borderRadius: radius.control,
-        },
-        View(
-          {
-            width: 40, height: 40, borderRadius: radius.pill,
-            backgroundColor: colors.surfaceElevated,
-            alignItems: 'center', justifyContent: 'center',
-          },
-          Text({ fontSize: 20 }, t.icon),
-        ),
-        View(
-          { flex: 1, gap: 2 },
-          Text({ fontSize: 15, fontWeight: '600', color: colors.textPrimary, numberOfLines: 1 }, t.name),
-          Text({ fontSize: 12, color: colors.textTertiary }, t.category),
-        ),
-        Amount({ cents: t.amountCents, size: 15, weight: '600' }),
-      ),
-    )),
+  )
+}
+
+function txRow(t: Tx): RenderNode {
+  return Pressable(
+    {
+      key: 'home-tx-' + t.id,
+      onTap: () => { lumen.haptics('soft'); openTxPreviewSheet(t.id) },
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: space.md,
+      paddingTop: space.md, paddingBottom: space.md,
+      paddingLeft: space.md, paddingRight: space.md,
+      borderRadius: radius.control,
+    },
+    View(
+      {
+        width: 44, height: 44, borderRadius: 22,
+        backgroundColor: colors.surfaceElevated,
+        alignItems: 'center', justifyContent: 'center',
+      },
+      Text({ fontSize: 22 }, t.icon),
+    ),
+    View(
+      { flex: 1, gap: 2 },
+      Text({ fontSize: 14, fontWeight: '600', color: colors.textPrimary, numberOfLines: 1 }, t.name),
+      Text({ fontSize: 12, color: colors.textTertiary, numberOfLines: 1 }, t.category),
+    ),
+    Text(
+      {
+        fontSize: 14,
+        fontWeight: '700',
+        color: t.amountCents > 0 ? colors.positive : colors.textPrimary,
+      },
+      (t.amountCents > 0 ? '+' : '') + money(t.amountCents),
+    ),
   )
 }

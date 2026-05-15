@@ -3,16 +3,16 @@ import Foundation
 import LocalAuthentication
 
 /// `lumen.biometrics.{authenticate(reason), available()}` — Face ID / Touch ID
-/// через `LAContext.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics)`.
+/// via `LAContext.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics)`.
 ///
-/// `available()` синхронно отвечает `'faceID' | 'touchID' | 'none'`.
-/// `authenticate(reason)` возвращает `Promise<bool>` — resolve(true) при успехе,
-/// resolve(false) при отказе/ошибке (включая cancel и lockout). reject не
-/// используем намеренно: для UX почти всегда хочется булевую развилку, а не
-/// try/catch ради cancel'а.
+/// `available()` synchronously returns `'faceID' | 'touchID' | 'none'`.
+/// `authenticate(reason)` returns `Promise<bool>` — resolve(true) on success,
+/// resolve(false) on denial/error (including cancel and lockout). reject is
+/// intentionally not used: for UX you almost always want a boolean fork, not
+/// try/catch just for cancel.
 ///
-/// Требует `NSFaceIDUsageDescription` в Info.plist на устройствах с Face ID —
-/// без неё iOS падает при первой попытке. Touch ID не требует separate key.
+/// Requires `NSFaceIDUsageDescription` in Info.plist on Face ID devices —
+/// without it iOS crashes on first attempt. Touch ID doesn't need a separate key.
 extension JSEngine {
     func installBiometricsBridge() {
         guard let lumen = context.objectForKeyedSubscript("lumen") else { return }
@@ -35,9 +35,9 @@ extension JSEngine {
         let nativeAuth: @convention(block) (String?, JSValue, JSValue) -> Void = { reason, resolve, _ in
             let reason = (reason?.isEmpty == false) ? reason! : "Authenticate"
             Task { @MainActor in
-                // Per-origin Lumen-gate. Без него любой origin мог бы вызвать
-                // системный Face ID/Touch ID prompt с произвольным текстом
-                // «Authenticate to сделать что-то sketchy» — фишинг-вектор.
+                // Per-origin Lumen gate. Without it any origin could trigger
+                // the system Face ID/Touch ID prompt with arbitrary text
+                // "Authenticate to do something sketchy" — phishing vector.
                 let grant = await PermissionStore.shared.request(origin: originRef, capability: .biometric)
                 guard grant == .granted else {
                     _ = resolve.call(withArguments: [false])

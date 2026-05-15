@@ -1,10 +1,10 @@
-// Account state. Module-level signal = shared state между всеми pages.
-// Импортить `balance` где угодно — везде один и тот же реактивный signal,
-// в любой page оно обновится в момент изменения.
+// Account state. Module-level signal = shared state across all pages.
+// Importing `balance` anywhere — it's the same reactive signal everywhere,
+// and updates land in every page the moment it changes.
 //
-// Pattern: модуль экспортирует readonly references (Signal<T> для чтения,
-// `value` setter возможен — но мутируем через action-функции для
-// observability и более понятного call-graph'а.
+// Pattern: the module exports readonly references (Signal<T> for reads,
+// the `value` setter is allowed — but we mutate via action functions for
+// observability and a clearer call-graph.
 
 interface AccountInfo {
   holderName: string
@@ -13,13 +13,14 @@ interface AccountInfo {
 }
 
 export const account = signal<AccountInfo>({
-  holderName: 'Arian Allenson',
-  iban: 'IL21 0040 5000 1234 5678 9012',
+  holderName: 'Ариан Алленсон',
+  iban: 'RU82 4044 5552 5000 1234 5678 9012',
   cardLast4: '4422',
 })
 
-/** В центах. Обновляется при добавлении транзакций через `applyDelta`. */
-export const balanceCents = signal<number>(241_85_00)
+/** In kopecks. This is the balance of the MAIN account (Tinkoff Black) —
+ *  also the one updated when transactions are added via `applyDelta`. */
+export const balanceCents = signal<number>(241_850_00)
 
 export function applyDelta(deltaCents: number): void {
   balanceCents.value = balanceCents.peek() + deltaCents

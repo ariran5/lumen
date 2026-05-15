@@ -1,6 +1,6 @@
-// Cards tab — hero-карточка (accent gradient-like surface) + горизонтальный
+// Cards tab — hero card (accent gradient-like surface) + horizontal
 // dot indicator + actions grid (Freeze / Limits / Number / Lost). Actions
-// открывают bottom-sheet'ы или native action-sheet'ы.
+// open bottom-sheets or native action-sheets.
 
 import { GlassCard } from '../components/glass-card'
 import { Header } from '../components/header'
@@ -12,9 +12,9 @@ import { TAB_BAR_HEIGHT } from '../state/ui'
 import { openCardActionsSheet } from '../sheets/card-actions'
 
 export function cardsPage() {
-  // Локальный per-tab state. Caveat: при switch'е таба и обратно signal
-  // пересоздаётся (фабрика вызывается заново). Если нужна persistence —
-  // подними в state/account.ts.
+  // Local per-tab state. Caveat: on tab switch back and forth the signal
+  // is recreated (factory runs again). If persistence is needed —
+  // lift it into state/account.ts.
   const frozen = signal(false)
 
   return {

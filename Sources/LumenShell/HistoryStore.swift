@@ -7,8 +7,8 @@ struct HistoryEntry: Codable, Sendable {
     let at: TimeInterval   // unix seconds
 }
 
-/// Browser-wide история визитов. Persists в Documents/history.json.
-/// Trim до `maxEntries` старых записей чтобы файл не рос бесконечно.
+/// Browser-wide visit history. Persisted to Documents/history.json.
+/// Trim to `maxEntries` old records so the file doesn't grow unbounded.
 @MainActor
 final class HistoryStore {
     static let shared = HistoryStore()
@@ -24,7 +24,7 @@ final class HistoryStore {
     }
 
     func record(url: URL, title: String) {
-        // Внутренние lumen:// страницы в историю не пишем.
+        // Internal lumen:// pages are not recorded to history.
         if url.scheme == "lumen" { return }
 
         let entry = HistoryEntry(
@@ -59,8 +59,8 @@ final class HistoryStore {
         persist()
     }
 
-    /// Persist + push в JS-подписчиков. Любая мутация публичных методов
-    /// проходит через эту точку — единая seam для notify.
+    /// Persist + push to JS subscribers. Every mutation in public methods
+    /// flows through this point — a single seam for notify.
     private func persist() {
         save()
         NativeNotifier.shared.fire("history")

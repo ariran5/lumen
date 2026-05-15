@@ -1,12 +1,12 @@
 import Foundation
 import UIKit
 
-/// Per-origin permission grants. Source of truth — UserDefaults. Ключи
-/// устроены `lumen.permissions.<origin-shortHash>.<capability>` → `"granted"`
-/// / `"denied"`. Отсутствие ключа = `.prompt`.
+/// Per-origin permission grants. Source of truth — UserDefaults. Keys
+/// are `lumen.permissions.<origin-shortHash>.<capability>` → `"granted"`
+/// / `"denied"`. Absence of key = `.prompt`.
 ///
-/// shortHash совпадает с тем что используется в `OriginContext.storagePrefix`
-/// — clear-site-data может wipe'нуть всё за раз перебором по обоим префиксам.
+/// shortHash matches the one used in `OriginContext.storagePrefix`
+/// — clear-site-data can wipe everything in one pass over both prefixes.
 @MainActor
 final class PermissionStore {
     static let shared = PermissionStore()
@@ -19,7 +19,7 @@ final class PermissionStore {
         "lumen.permissions.\(origin.shortHash).\(capability.rawValue)"
     }
 
-    /// Текущее sticky-решение без prompt'инга. Безопасно зовётся часто.
+    /// Current sticky decision without prompting. Safe to call frequently.
     func status(origin: Origin, capability: Capability) -> Grant {
         guard let raw = defaults.string(forKey: key(origin, capability)),
               let grant = Grant(rawValue: raw),
@@ -29,24 +29,24 @@ final class PermissionStore {
         return grant
     }
 
-    /// Persist'ит decision. Используется prompt'ом после ответа юзера, и
-    /// напрямую тестами / settings UI.
+    /// Persists the decision. Used by prompt after user answer, and
+    /// directly by tests / settings UI.
     func set(origin: Origin, capability: Capability, grant: Grant) {
         let k = key(origin, capability)
         if grant.isDecided {
             defaults.set(grant.rawValue, forKey: k)
         } else {
-            // .prompt = удалить ключ. Следующий request снова спросит.
+            // .prompt = remove the key. Next request will ask again.
             defaults.removeObject(forKey: k)
         }
     }
 
-    /// Возвращает grant в `.prompt` — следующий request покажет UI снова.
+    /// Resets grant to `.prompt` — next request will show UI again.
     func revoke(origin: Origin, capability: Capability) {
         defaults.removeObject(forKey: key(origin, capability))
     }
 
-    /// Wipe всех grant'ов для origin'а. Для shell settings «Clear site data».
+    /// Wipe all grants for an origin. For shell settings "Clear site data".
     func clear(origin: Origin) {
         let prefix = "lumen.permissions.\(origin.shortHash)."
         for k in defaults.dictionaryRepresentation().keys where k.hasPrefix(prefix) {
@@ -54,9 +54,9 @@ final class PermissionStore {
         }
     }
 
-    /// Главный entry-point для bridge'ей: либо вернуть зашедший grant, либо
-    /// показать prompt и подождать решение. `.prompt` никогда не возвращается
-    /// наружу — после `request` всегда `.granted` или `.denied`.
+    /// Main entry point for bridges: either return the existing grant, or
+    /// show prompt and await a decision. `.prompt` is never returned
+    /// outward — after `request` it's always `.granted` or `.denied`.
     func request(origin: Origin, capability: Capability) async -> Grant {
         switch status(origin: origin, capability: capability) {
         case .granted: return .granted

@@ -5,9 +5,9 @@ import UIKit
 extension JSEngine {
     func installSafeAreaBridge() {
         guard let lumen = context.objectForKeyedSubscript("lumen") else { return }
-        // Placeholder — CoreFramework переопределит после eval'а на реактивные
-        // signal-backed геттеры. Здесь оставляем пустой объект, чтобы первое
-        // обращение из user-code не падало с undefined.
+        // Placeholder — CoreFramework will override after eval with reactive
+        // signal-backed getters. Leave an empty object here so first
+        // access from user code doesn't fail with undefined.
         if let initial = JSValue(newObjectIn: context) {
             initial.setObject(0, forKeyedSubscript: "top" as NSString)
             initial.setObject(0, forKeyedSubscript: "bottom" as NSString)
@@ -17,9 +17,9 @@ extension JSEngine {
         }
     }
 
-    /// Native сторона дёргает эту функцию когда insets меняются
+    /// Native side calls this when insets change
     /// (viewSafeAreaInsetsDidChange, rotation, keyboard). CoreFramework
-    /// зарегистрировал `lumen._updateSafeArea` который пушит в signals.
+    /// registered `lumen._updateSafeArea` which pushes to signals.
     func updateSafeArea(_ insets: UIEdgeInsets) {
         guard let lumen = context.objectForKeyedSubscript("lumen"),
               let updater = lumen.objectForKeyedSubscript("_updateSafeArea"),

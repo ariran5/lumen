@@ -1,6 +1,6 @@
-// Header — единая верхняя плашка для всех страниц (lumen shell скрывает
-// свой nav bar, и каждый fast-app рисует header сам). Слева — title,
-// справа — опциональная action-кнопка.
+// Header — single top bar for all pages (the lumen shell hides
+// its nav bar, and each fast-app draws its own header). Left — title,
+// right — optional action button.
 
 import { colors, radius, space } from '../lib/colors'
 
@@ -28,7 +28,7 @@ export function Header(p: HeaderProps): RenderNode {
       ? Pressable(
           {
             onTap: p.onLeft ?? (() => {}),
-            width: 36, height: 36, borderRadius: radius.pill,
+            width: 36, height: 36, borderRadius: 18,
             backgroundColor: colors.surface,
             alignItems: 'center', justifyContent: 'center',
           },
@@ -47,7 +47,7 @@ export function Header(p: HeaderProps): RenderNode {
             onTap: p.onRight ?? (() => {}),
             paddingTop: space.sm, paddingBottom: space.sm,
             paddingLeft: space.md, paddingRight: space.md,
-            borderRadius: radius.pill,
+            borderRadius: 15,
             backgroundColor: colors.surface,
           },
           Text({ fontSize: 14, fontWeight: '600', color: colors.textPrimary }, p.rightLabel),

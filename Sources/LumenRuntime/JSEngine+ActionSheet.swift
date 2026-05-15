@@ -4,8 +4,8 @@ import UIKit
 
 /// `lumen.actionSheet({title, message, actions, onSelect, onCancel})`.
 /// `actions: Array<{label, style: 'default'|'destructive'|'cancel'}>`.
-/// `onSelect(index)` дёргается с индексом выбранного action (0-based).
-/// Cancel-кнопка добавляется автоматически если в actions её нет.
+/// `onSelect(index)` is called with the index of the selected action (0-based).
+/// Cancel button is added automatically if not present in actions.
 extension JSEngine {
     func installActionSheetBridge() {
         guard let lumen = context.objectForKeyedSubscript("lumen") else { return }

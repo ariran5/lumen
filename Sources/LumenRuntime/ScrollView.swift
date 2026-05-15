@@ -1,13 +1,13 @@
 import JavaScriptCore
 import UIKit
 
-/// Lumen-обёртка над UIScrollView. Внутри живёт `contentView`, чей layer —
-/// rootLayer для nested Renderer. Renderer в режиме `.scrollContent` считает
-/// layout с infinite height, после чего мы читаем `computedContentHeight()`
-/// и выставляем `contentView.bounds.height` + `contentSize`.
+/// Lumen wrapper over UIScrollView. Inside lives `contentView`, whose layer is
+/// the rootLayer for a nested Renderer. Renderer in `.scrollContent` mode computes
+/// layout with infinite height, then we read `computedContentHeight()`
+/// and set `contentView.bounds.height` + `contentSize`.
 ///
-/// Паттерн оверлея тот же что у VirtualList / TextInput — UIScrollView сидит
-/// как subview родительского hostView с абсолютным frame'ом из flex.
+/// Same overlay pattern as VirtualList / TextInput — UIScrollView sits
+/// as a subview of the parent hostView with an absolute frame from flex.
 @MainActor
 final class LumenScrollView: UIScrollView, UIScrollViewDelegate {
 
@@ -33,18 +33,18 @@ final class LumenScrollView: UIScrollView, UIScrollViewDelegate {
         showsHorizontalScrollIndicator = false
         delegate = self
         addSubview(contentView)
-        // Slot-thunk внутри scroll-контента может изменить число детей —
-        // renderer.replaceChildren запустит relayout() и дёрнет onAfterLayout,
-        // тут пересчитаем contentSize.
+        // A slot-thunk inside scroll content may change the number of children —
+        // renderer.replaceChildren will run relayout() and fire onAfterLayout,
+        // we recompute contentSize here.
         self.renderer.onAfterLayout = { [weak self] in
             self?.resyncContentSize()
         }
     }
 
-    /// Включает UIRefreshControl при появлении `onRefresh`, выключает при
-    /// `onRefresh == nil`. Контроль над спиннером — через возвращаемый из
-    /// JS Promise: после resolve/reject native сам зовёт `endRefreshing()`.
-    /// Sync-handler без Promise — конец спиннера сразу после возврата.
+    /// Enables UIRefreshControl when `onRefresh` appears, disables when
+    /// `onRefresh == nil`. Spinner control is via the Promise returned from
+    /// JS: after resolve/reject native calls `endRefreshing()`.
+    /// Sync handler without a Promise — spinner ends immediately after return.
     func configureRefresh(onRefresh: JSValue?) {
         onRefreshHandler = onRefresh
 
@@ -73,7 +73,7 @@ final class LumenScrollView: UIScrollView, UIScrollViewDelegate {
         guard let handler = onRefreshHandler else { return }
         let result = handler.call(withArguments: [])
 
-        // Если JS вернул thenable — ждём resolve/reject. Иначе — sync, end сразу.
+        // If JS returned a thenable — wait for resolve/reject. Otherwise — sync, end immediately.
         if let result, result.isObject,
            let thenProp = result.objectForKeyedSubscript("then"),
            thenProp.isObject,
@@ -83,13 +83,13 @@ final class LumenScrollView: UIScrollView, UIScrollViewDelegate {
                     self?.refreshControl?.endRefreshing()
                 }
             }
-            // .then(end, end) — заканчиваем спиннер и на resolve, и на reject.
+            // .then(end, end) — end spinner on both resolve and reject.
             if let endValue = JSValue(object: endBlock, in: context) {
                 result.invokeMethod("then", withArguments: [endValue, endValue])
                 return
             }
         }
-        // Sync path: дать UIKit нарисовать спиннер до того как мы его закроем.
+        // Sync path: let UIKit draw the spinner before we close it.
         DispatchQueue.main.async { [weak self] in
             self?.refreshControl?.endRefreshing()
         }
@@ -107,9 +107,9 @@ final class LumenScrollView: UIScrollView, UIScrollViewDelegate {
         }
     }
 
-    // Fires часто (per-frame во время scroll). Если JS handler тяжёлый,
-    // компонент сам должен throttle'ить. Bridge call ~0.05ms на пустой
-    // handler, поэтому 120Hz scroll даёт ≤6ms/sec суммарно — приемлемо.
+    // Fires frequently (per-frame during scroll). If the JS handler is heavy,
+    // the component must throttle itself. Bridge call is ~0.05ms on an empty
+    // handler, so 120Hz scroll gives ≤6ms/sec total — acceptable.
     nonisolated func scrollViewDidScroll(_ scrollView: UIScrollView) {
         MainActor.assumeIsolated {
             guard let cb = onScrollHandler else { return }
@@ -125,10 +125,10 @@ final class LumenScrollView: UIScrollView, UIScrollViewDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) not implemented") }
 
-    /// Принимает детей scroll-узла + стиль самого scroll-узла (нужен для
-    /// padding/gap, которые пробрасываются на синтетический wrapper).
-    /// Wrap'ает их в один column-узел, дёргает nested renderer, ресайзит
-    /// contentView под получившуюся высоту.
+    /// Accepts the children of the scroll node + the style of the scroll node itself (needed for
+    /// padding/gap, which are forwarded onto a synthetic wrapper).
+    /// Wraps them in one column node, drives the nested renderer, resizes
+    /// contentView to the resulting height.
     func renderContent(children: [RenderNode], wrapperStyle: ViewStyle) {
         lastRenderedChildren = children
         lastWrapperStyle = wrapperStyle
@@ -140,7 +140,7 @@ final class LumenScrollView: UIScrollView, UIScrollViewDelegate {
         if bounds.width != lastViewportWidth {
             lastViewportWidth = bounds.width
             // Reset content frame to current viewport width — renderer
-            // прочитает rootLayer.bounds.width при следующем relayout.
+            // will read rootLayer.bounds.width on next relayout.
             contentView.frame = CGRect(origin: .zero,
                                         size: CGSize(width: bounds.width,
                                                      height: contentView.bounds.height))
@@ -151,8 +151,8 @@ final class LumenScrollView: UIScrollView, UIScrollViewDelegate {
     private func applyRender() {
         guard bounds.width > 0 else { return }
 
-        // Wrapper — column-контейнер с padding/gap из scroll-узла. justify=start
-        // (дефолт) обеспечивает наклейку детей сверху без растяжения.
+        // Wrapper — column container with padding/gap from the scroll node. justify=start
+        // (default) sticks children to the top without stretching.
         var wrapper = RenderNode()
         wrapper.kind = .view
         wrapper.style = lastWrapperStyle
@@ -174,8 +174,8 @@ final class LumenScrollView: UIScrollView, UIScrollViewDelegate {
     }
 }
 
-/// UIRefreshControl ждёт `@objc` target. JSValue не может быть таким, поэтому
-/// заворачиваем в NSObject-обёртку, которая держит Swift-замыкание.
+/// UIRefreshControl expects an `@objc` target. JSValue can't be one, so
+/// we wrap it in an NSObject wrapper that holds a Swift closure.
 @MainActor
 private final class RefreshTarget: NSObject {
     let action: () -> Void

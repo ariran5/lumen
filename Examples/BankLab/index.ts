@@ -1,10 +1,10 @@
-// BankLab — банковский dashboard. Демонстрирует:
-//  • ScrollView + sticky Glass pill (thunk-driven opacity и текст)
-//  • Slot — реактивный список транзакций
-//  • bottomSheet с деталями транзакции
-//  • Quick actions row, hero card с балансом
+// BankLab — banking dashboard. Demonstrates:
+//  • ScrollView + sticky Glass pill (thunk-driven opacity and text)
+//  • Slot — reactive transactions list
+//  • bottomSheet with transaction details
+//  • Quick actions row, hero card with balance
 //  • Filter chips (Pressable + state)
-//  • Реактивный баланс при добавлении транзакций
+//  • Reactive balance when adding transactions
 
 // ─────────── data ───────────
 
@@ -48,7 +48,7 @@ const visibleTx = computed(() => {
 })
 
 const weekDelta = computed(() => {
-  // Простая модель: положительные − негативные за «эту неделю» (первые 5 шт)
+  // Simple model: positives − negatives for "this week" (first 5 items)
   let s = 0
   for (const t of transactions.value.slice(0, 5)) s += t.amountCents
   return s
@@ -68,11 +68,11 @@ function amountColor(c: number): Color {
 }
 
 // ─────────── app ───────────
-// Системные светлые цвета — чтобы Liquid Glass sheet (iOS 26)
-// гармонировал с приложением, а не контрастировал.
+// System light colors — so the Liquid Glass sheet (iOS 26)
+// harmonizes with the app rather than contrasting.
 //   bg page      #F2F2F7  (UIColor.systemGroupedBackground)
 //   bg card      #FFFFFF
-//   bg pill/btn  #FFFFFF  с тонким бордером
+//   bg pill/btn  #FFFFFF  with a thin border
 //   text 1       #0F0F12
 //   text 2       #6B6B73  (.secondaryLabel-ish)
 //   border       #E5E5EA  (.separator)

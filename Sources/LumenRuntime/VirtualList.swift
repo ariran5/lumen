@@ -20,15 +20,15 @@ final class VirtualListController {
         self.renderFn = renderFn
     }
 
-    /// Перерендерить видимые ячейки. cellForItemAt дёрнет JS-`render(i)`
-    /// заново; renderer внутри ячейки применит дельту через reconciler,
-    /// не пересоздавая CALayer'ы.
+    /// Re-render visible cells. cellForItemAt will call JS `render(i)`
+    /// again; renderer inside the cell will apply the delta via reconciler
+    /// without recreating CALayers.
     func reload() {
         view?.collectionView.reloadData()
     }
 
-    /// Применить новые значения из дерева. Если изменились `count` или
-    /// `itemHeight` — invalidate layout и reload.
+    /// Apply new values from the tree. If `count` or `itemHeight`
+    /// changed — invalidate layout and reload.
     func update(count: Int, itemHeight: CGFloat, renderFn: JSValue) {
         let countChanged = self.count != count
         let heightChanged = self.itemHeight != itemHeight
@@ -41,7 +41,7 @@ final class VirtualListController {
         if countChanged || heightChanged {
             view?.collectionView.reloadData()
         } else {
-            // ту же длину просто перерисуем (вдруг render-функция вернёт другой контент)
+            // same length — just re-render (render function may return different content)
             view?.collectionView.reloadData()
         }
     }
@@ -81,8 +81,8 @@ final class LumenCell: UICollectionViewCell {
         }
     }
 
-    // prepareForReuse не нужен: на следующий render renderer сам сделает
-    // diff с прошлым деревом ячейки и применит дельту без флэша.
+    // prepareForReuse isn't needed: on next render the renderer itself will
+    // diff against the previous cell tree and apply the delta without flash.
 }
 
 final class VirtualListView: UIView, UICollectionViewDataSource, UICollectionViewDelegate {

@@ -1,12 +1,12 @@
 import JavaScriptCore
 import UIKit
 
-/// Native UITextField как overlay поверх Lumen-дерева. Используется через
-/// `kind: 'textInput'` в RenderNode — renderer монтирует LumenTextField как
-/// subview hostView с absolute frame из flex layout (паттерн из VirtualList).
+/// Native UITextField as an overlay on top of the Lumen tree. Used via
+/// `kind: 'textInput'` in RenderNode — renderer mounts LumenTextField as
+/// a subview of hostView with absolute frame from flex layout (pattern from VirtualList).
 ///
-/// Стиль (backgroundColor, font, color, borderRadius, padding) пробрасывается
-/// напрямую в UITextField и его layer. Padding реализован через override
+/// Style (backgroundColor, font, color, borderRadius, padding) is forwarded
+/// directly into UITextField and its layer. Padding is implemented by overriding
 /// textRect/editingRect/placeholderRect.
 @MainActor
 final class LumenTextField: UITextField {
@@ -33,8 +33,8 @@ final class TextInputController: NSObject, UITextFieldDelegate {
     var onFocus: JSValue?
     var onBlur: JSValue?
 
-    /// Хранится текущее «модельное» значение из JS, чтобы при reconcile не
-    /// записывать textField.text вхолостую и не сбрасывать каретку.
+    /// Stores the current "model" value from JS so that on reconcile we don't
+    /// write textField.text needlessly and reset the caret.
     private var lastValue: String = ""
 
     func attach(_ field: LumenTextField) {
@@ -64,8 +64,8 @@ final class TextInputController: NSObject, UITextFieldDelegate {
         self.onFocus = onFocus
         self.onBlur = onBlur
 
-        // Controlled value: пишем только если отличается от того что в поле,
-        // иначе iOS сбросит cursor position на end-of-text.
+        // Controlled value: write only if different from what's in the field,
+        // otherwise iOS resets cursor position to end-of-text.
         if field.text != value {
             field.text = value
         }

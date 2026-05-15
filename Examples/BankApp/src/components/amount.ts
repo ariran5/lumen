@@ -1,6 +1,6 @@
-// Amount — money-display с цветом по знаку (income → green, spend → red).
-// Принимает либо числовой `cents`, либо thunk `() => cents` — thunk
-// автоматом включает per-prop реактивность (Vapor-style).
+// Amount — money-display colored by sign (income → green, spend → red).
+// Accepts either a numeric `cents` or a thunk `() => cents` — a thunk
+// automatically enables per-prop reactivity (Vapor-style).
 
 import { colors } from '../lib/colors'
 import { moneyWithSign } from '../lib/format'
@@ -9,7 +9,7 @@ interface AmountProps {
   cents: number | Thunk<number>
   size?: number
   weight?: '500' | '600' | '700' | '800'
-  /** Force-цвет, игнорирует знак. */
+  /** Force color, ignores sign. */
   color?: Color
 }
 

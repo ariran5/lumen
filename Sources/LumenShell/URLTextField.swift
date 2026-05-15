@@ -1,10 +1,10 @@
 import SwiftUI
 import UIKit
 
-/// UITextField wrapper. Нужен ради `selectAll(nil)` в `textFieldDidBeginEditing`
-/// — SwiftUI TextField не умеет программно выделять текст, из-за чего перебить
-/// URL приходится Backspace'ом. С нативным полем при фокусе весь текст
-/// подсвечивается, любое нажатие клавиши перетирает.
+/// UITextField wrapper. Needed for `selectAll(nil)` in `textFieldDidBeginEditing`
+/// — SwiftUI TextField can't programmatically select text, so to overwrite
+/// a URL you'd need Backspace. With the native field, on focus the whole text
+/// is highlighted and any key press overwrites it.
 struct URLTextField: UIViewRepresentable {
     @Binding var text: String
     @Binding var isFocused: Bool
@@ -62,7 +62,7 @@ struct URLTextField: UIViewRepresentable {
 
         func textFieldDidBeginEditing(_ field: UITextField) {
             parent.isFocused = true
-            // Pre-select all — typing сразу перетирает URL.
+            // Pre-select all — typing immediately overwrites the URL.
             DispatchQueue.main.async {
                 field.selectAll(nil)
             }

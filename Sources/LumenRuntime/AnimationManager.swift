@@ -2,15 +2,15 @@ import Foundation
 import QuartzCore
 import UIKit
 
-/// Реестр AnimatedValue ↔ CALayer + off-main анимации через CABasicAnimation /
-/// CASpringAnimation. Главная фишка — animations крутятся на render-сервере
-/// (backboardd) независимо от main thread: даже если JS залип на 200ms,
-/// движение не дрогнет.
+/// Registry AnimatedValue ↔ CALayer + off-main animations via CABasicAnimation /
+/// CASpringAnimation. Main feature — animations run on the render server
+/// (backboardd) independently of the main thread: even if JS stalls for 200ms,
+/// motion doesn't stutter.
 ///
-/// Связка `(layer, property) → animId` устанавливается рендерером при apply,
-/// снимается при removeMountTree. Когда AnimatedValue.set / .animateTo / .stop
-/// вызывается из JS, AnimationManager итерирует все связанные layer'ы и
-/// применяет новое значение (с анимацией или без).
+/// The binding `(layer, property) → animId` is set by the renderer on apply,
+/// removed on removeMountTree. When AnimatedValue.set / .animateTo / .stop
+/// is called from JS, AnimationManager iterates all bound layers and
+/// applies the new value (with or without animation).
 @MainActor
 final class AnimationManager {
     static let shared = AnimationManager()
@@ -20,9 +20,9 @@ final class AnimationManager {
         var isTransform: Bool { self != .opacity }
     }
 
-    /// Биндинги одного CALayer'а на animatable свойства. Static-значения
-    /// нужны как fallback при composing transform'а — если из 3 transform-полей
-    /// анимировано только translateX, то Y/scale/rotate берутся из статики.
+    /// One CALayer's bindings to animatable properties. Static values
+    /// are needed as fallback when composing the transform — if out of 3 transform fields
+    /// only translateX is animated, Y/scale/rotate come from statics.
     private struct LayerState {
         weak var layer: CALayer?
         var animIds: [Property: Int] = [:]
@@ -52,12 +52,12 @@ final class AnimationManager {
     }
 
     func release(id: Int) {
-        // Биндинги остаются на стороне layers; они отсохнут при unbindLayer.
+        // Bindings remain on the layers side; they drop on unbindLayer.
         nodes.removeValue(forKey: id)
     }
 
-    /// Полный reset — вызывается на hot-reload, когда мы дропаем JSEngine.
-    /// Иначе при next-load id'ы начнутся с 1 и наложатся на старые записи.
+    /// Full reset — called on hot-reload when we drop JSEngine.
+    /// Otherwise on next load ids start at 1 and clash with old entries.
     func reset() {
         nodes.removeAll(keepingCapacity: false)
         layers.removeAll(keepingCapacity: false)
@@ -69,10 +69,10 @@ final class AnimationManager {
 
     // MARK: - Renderer integration
 
-    /// Регистрирует layer с заданным набором animated bindings + static
-    /// fallback'ами. Полностью переписывает state для этого layer'а.
-    /// После регистрации применяет composed transform/opacity немедленно
-    /// (без анимации) — это initial mount или reconcile-snapshot.
+    /// Registers a layer with the given set of animated bindings + static
+    /// fallbacks. Fully overwrites state for this layer.
+    /// After registration applies composed transform/opacity immediately
+    /// (without animation) — this is initial mount or reconcile snapshot.
     func bindLayer(_ layer: CALayer,
                    animIds: [Property: Int],
                    staticTranslateX: Double,
@@ -84,7 +84,7 @@ final class AnimationManager {
                    staticOpacity: Double) {
         let lid = ObjectIdentifier(layer)
 
-        // Detach старые animId-биндинги: убрать ссылку из node.layerIds
+        // Detach old animId bindings: remove reference from node.layerIds
         if let old = layers[lid] {
             for (_, animId) in old.animIds {
                 nodes[animId]?.layerIds.remove(lid)
@@ -126,7 +126,7 @@ final class AnimationManager {
         node.current = value
         nodes[id] = node
         for layerId in node.layerIds {
-            // Снять любую in-flight анимацию по этому animId (set перебивает анимацию)
+            // Remove any in-flight animation for this animId (set overrides animation)
             removeAnimations(layerId: layerId, animId: id)
             applyComposed(layerId: layerId,
                           animated: false,
@@ -152,8 +152,8 @@ final class AnimationManager {
     func stop(id: Int) {
         guard var node = nodes[id] else { return }
 
-        // Захватываем presentation-значение с первого живого binding'а,
-        // чтобы JS-side .current() видел реальное визуальное положение.
+        // Capture the presentation value from the first live binding,
+        // so JS-side .current() sees the actual visual position.
         var presentationValue: Double?
         outer: for layerId in node.layerIds {
             guard let state = layers[layerId], let layer = state.layer else { continue }
@@ -182,11 +182,11 @@ final class AnimationManager {
 
     // MARK: - Composition
 
-    /// Композит transform + opacity для одного layer'а:
-    ///   - если property анимировано → берём nodes[animId].current
-    ///   - иначе → static fallback
-    /// Применяет либо мгновенно (CATransaction disable), либо как
-    /// CABasicAnimation/CASpringAnimation от presentation → new.
+    /// Composite transform + opacity for one layer:
+    ///   - if property is animated → take nodes[animId].current
+    ///   - otherwise → static fallback
+    /// Applies either instantly (CATransaction disable) or as
+    /// CABasicAnimation/CASpringAnimation from presentation → new.
     private func applyComposed(layerId: ObjectIdentifier,
                                animated: Bool,
                                animId: Int?,
@@ -212,7 +212,7 @@ final class AnimationManager {
 
         guard let animId else { return }
 
-        // Какие property этот конкретный animId анимирует на этом layer?
+        // Which properties this particular animId animates on this layer?
         var animatesTransform = false
         var animatesOpacity = false
         for (prop, aid) in state.animIds where aid == animId {
@@ -224,8 +224,8 @@ final class AnimationManager {
         let fromTransform: CATransform3D = presentation?.transform ?? layer.transform
         let fromOpacity: Float = presentation?.opacity ?? layer.opacity
 
-        // Сначала установить новую модель (без implicit-анимаций),
-        // потом наложить explicit CABasicAnimation от presentation → new.
+        // First set the new model (without implicit animations),
+        // then overlay explicit CABasicAnimation from presentation → new.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         layer.transform = newTransform
@@ -282,9 +282,9 @@ final class AnimationManager {
 
     // MARK: - Presentation read-out
 
-    /// Достать из presentation layer'а текущее визуальное значение для
-    /// заданного property. Используется в .stop() — иначе при удалении
-    /// CABasicAnimation layer прыгнет на model-value (target).
+    /// Read the current visual value for the given property from the
+    /// layer's presentation. Used in .stop() — otherwise removing the
+    /// CABasicAnimation would snap the layer to model-value (target).
     private func readPresentation(layer: CALayer,
                                   property: Property,
                                   state: LayerState) -> Double? {
@@ -331,7 +331,7 @@ final class AnimationManager {
             spring.stiffness = 200
             spring.damping = 18
             spring.initialVelocity = 0
-            // settling duration авто-вычисляется CA исходя из параметров пружины
+            // settling duration is auto-computed by CA based on spring parameters
             spring.duration = spring.settlingDuration
             anim = spring
         } else {

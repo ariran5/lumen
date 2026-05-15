@@ -3,28 +3,28 @@ import JavaScriptCore
 import QuartzCore
 @testable import Lumen
 
-/// End-to-end проверки fine-grained реактивности: signal → thunk → effect
+/// End-to-end checks of fine-grained reactivity: signal → thunk → effect
 /// → `lumen._patchProp` → applyPatch → CALayer + reconcile.
 ///
-/// Эти тесты ловят класс багов где `reconcile` перезаписывает только что
-/// положенный per-prop patch из stale lastTree. Конкретный случай, который
-/// они отлавливают: sibling slot rebuild'ится по signal change, его
-/// `_replaceChildren` запускает full `relayout()`, и без same-id
-/// short-circuit'а в reconcile визуальные стили unrelated subtree'я
-/// перетираются обратно к initial значению, что выглядит как мелькание.
+/// These tests catch a class of bugs where `reconcile` overwrites a just-applied
+/// per-prop patch from a stale lastTree. The specific case they catch:
+/// a sibling slot rebuilds on signal change, its
+/// `_replaceChildren` triggers a full `relayout()`, and without the same-id
+/// short-circuit in reconcile, visual styles of an unrelated subtree
+/// get reverted to the initial value, which looks like flicker.
 @MainActor
 final class ReactivityTests: XCTestCase {
 
     // MARK: - Fixture
 
-    /// Свежий fixture per test — Swift 6 strict concurrency не любит
-    /// stored properties с @MainActor типами на XCTestCase (setUp/tearDown
-    /// технически non-isolated). Каждый тест берёт локальные значения.
+    /// Fresh fixture per test — Swift 6 strict concurrency dislikes
+    /// stored properties of @MainActor types on XCTestCase (setUp/tearDown
+    /// are technically non-isolated). Each test takes local values.
     private func makeFixture() -> (engine: JSEngine, renderer: Renderer, root: CALayer) {
         let root = CALayer()
-        // Renderer.relayout() ранее bail'ится если width==0 или height==0
-        // (см. guard в relayout). bounds на голом CALayer'е без parent'а
-        // не выводится из frame автоматически — ставим явно.
+        // Renderer.relayout() bails early if width==0 or height==0
+        // (see guard in relayout). bounds on a bare CALayer without a parent
+        // isn't derived from frame automatically — set it explicitly.
         root.bounds = CGRect(x: 0, y: 0, width: 320, height: 480)
         root.frame = CGRect(x: 0, y: 0, width: 320, height: 480)
         let renderer = Renderer(rootLayer: root)
@@ -38,18 +38,18 @@ final class ReactivityTests: XCTestCase {
         return (engine, renderer, root)
     }
 
-    /// JSC обрабатывает Promise.resolve().then через context'овый runloop.
-    /// В тестах JS-side scheduleFlush ставит микротаски, которые сами не
-    /// сработают пока мы не дадим runloop'у поработать. Pump в 50ms даёт
-    /// несколько шансов микротасковой очереди отстреляться.
+    /// JSC processes Promise.resolve().then via the context's runloop.
+    /// In tests JS-side scheduleFlush enqueues microtasks that won't run
+    /// until we let the runloop work. A 50ms pump gives the microtask
+    /// queue several chances to drain.
     private func flushMicrotasks(_ ms: Double = 50) {
         let deadline = Date(timeIntervalSinceNow: ms / 1000.0)
         RunLoop.current.run(mode: .default, before: deadline)
     }
 
-    /// Достаёт CGColor из NSAttributedString'а первого character'а Text-layer'а.
-    /// Это «текущий цвет» Text-узла после patch'а — он живёт в
-    /// `.foregroundColor` атрибуте, а не в отдельном CALayer'овом свойстве.
+    /// Extracts CGColor from the first character's NSAttributedString in a Text layer.
+    /// This is the "current color" of the Text node after patching — it lives in
+    /// the `.foregroundColor` attribute, not in a separate CALayer property.
     private func textColor(of layer: CALayer?) -> CGColor? {
         guard let textLayer = layer as? CATextLayer,
               let attributed = textLayer.string as? NSAttributedString,
@@ -67,8 +67,8 @@ final class ReactivityTests: XCTestCase {
         return String(format: "#%02X%02X%02X", r, g, b)
     }
 
-    /// Layer на DFS-пути в дереве. Удобно адресоваться к узлам без
-    /// выпиливания id'шников из JS.
+    /// Layer at a DFS path in the tree. Convenient way to address nodes without
+    /// extracting ids from JS.
     private func descend(_ root: CALayer, _ path: [Int]) -> CALayer? {
         var current: CALayer = root
         for idx in path {
@@ -95,11 +95,11 @@ final class ReactivityTests: XCTestCase {
 
     // MARK: - Smoke
 
-    /// Самый простой тест — eval'нем lumen.render с одним View+Text напрямую,
-    /// без mount/effect/signal. Проверяем что JS↔Swift bridge работает.
+    /// The simplest test — eval lumen.render with a single View+Text directly,
+    /// no mount/effect/signal. Verifies that the JS↔Swift bridge works.
     func testSmokeDirectRender() {
         let (engine, renderer, root) = makeFixture()
-        _ = renderer  // удерживаем — bridge капчурит weak
+        _ = renderer  // retain — bridge captures weakly
         _ = engine.eval("lumen.render(View({}, Text({ color: '#FF0000' }, 'hi')))")
         XCTAssertGreaterThan(root.sublayers?.count ?? 0, 0,
                              "lumen.render should produce sublayers")
@@ -108,28 +108,27 @@ final class ReactivityTests: XCTestCase {
     // MARK: - The flicker bug
 
     /// Reproduces the TabBar flicker: signal change rebuilds a sibling slot
-    /// (tab content), which triggers a full relayout. Без same-id reconcile
-    /// short-circuit'а applyAll re-applies stale tree style к unrelated
-    /// tab-bar Text'у и затирает только что положенный per-prop color patch.
+    /// (tab content), which triggers a full relayout. Without the same-id reconcile
+    /// short-circuit, applyAll re-applies stale tree style to the unrelated
+    /// tab-bar Text and overwrites the just-applied per-prop color patch.
     func testSiblingSlotRebuildPreservesPerPropPatchedColor() {
         let (engine, renderer, root) = makeFixture()
-        _ = renderer  // удерживаем — bridge капчурит weak
+        _ = renderer  // retain — bridge captures weakly
         let script = """
         const tab = signal('home')
 
-        // Слот A — «контент таба», подписан на tab.value через slotThunk и
-        // пересобирается на каждый switch. Симулирует index.ts'овский
-        // tab-content slot.
+        // Slot A — "tab content", subscribed to tab.value via slotThunk and
+        // rebuilt on each switch. Simulates the tab-content slot in index.ts.
         const contentSlot = Slot({}, () => Text(
           { color: '#000000' },
           tab.value === 'home' ? 'HOME PAGE' : 'OTHER PAGE'
         ))
 
-        // Слот B — «tab bar», НЕ читает tab.value в slotThunk'е. Только
-        // Text внутри использует per-prop color thunk. До фикса его цвет
-        // перетирался на каждом switch — relayout, инициированный
-        // contentSlot'ом, проходил по tab-bar Text'у и applyAll переписывал
-        // layer'у цвет из stale lastTree.style.color.
+        // Slot B — "tab bar", does NOT read tab.value in its slotThunk. Only
+        // the inner Text uses a per-prop color thunk. Before the fix its color
+        // was overwritten on every switch — the relayout initiated by
+        // contentSlot walked over the tab-bar Text and applyAll repainted
+        // the layer's color from stale lastTree.style.color.
         const barSlot = Slot({}, () => Text(
           { color: () => tab.value === 'home' ? '#FFFFFF' : '#A8A8B8' },
           'TAB BAR ITEM'
@@ -147,16 +146,16 @@ final class ReactivityTests: XCTestCase {
         XCTAssertEqual(cgColorHex(textColor(of: barTextLayer)), "#FFFFFF",
                        "initial color should be active white")
 
-        // Switch to 'other'. Это триггерит rebuild contentSlot + per-prop
-        // patch tab-bar Text'а. Без фикса reconcile перезапишет цвет
-        // обратно из stale tree → останется #FFFFFF.
+        // Switch to 'other'. This triggers rebuild of contentSlot + per-prop
+        // patch of tab-bar Text. Without the fix, reconcile rewrites the color
+        // back from the stale tree → stays #FFFFFF.
         _ = engine.eval("__switch('other')")
         flushMicrotasks()
 
         XCTAssertEqual(cgColorHex(textColor(of: barTextLayer)), "#A8A8B8",
                        "after switch, color must reflect patched value, not stale tree")
 
-        // Возврат на 'home' — цвет тоже должен обновиться.
+        // Back to 'home' — color must update too.
         _ = engine.eval("__switch('home')")
         flushMicrotasks()
         XCTAssertEqual(cgColorHex(textColor(of: barTextLayer)), "#FFFFFF",
@@ -165,11 +164,11 @@ final class ReactivityTests: XCTestCase {
 
     // MARK: - Multiple sibling thunks on same signal
 
-    /// Все N color-thunk'ов, читающих один и тот же signal, должны
-    /// сработать на signal change. Не выпадает «первый/последний эффект».
+    /// All N color thunks reading the same signal must fire
+    /// on a signal change. No "first/last effect" drop-out.
     func testAllSiblingThunksOnSameSignalFire() {
         let (engine, renderer, root) = makeFixture()
-        _ = renderer  // удерживаем — bridge капчурит weak
+        _ = renderer  // retain — bridge captures weakly
         let script = """
         const active = signal(0)
         const makeText = (i) => Text(
@@ -177,7 +176,7 @@ final class ReactivityTests: XCTestCase {
           'item-' + i
         )
 
-        // Sibling slot чтобы триггерить full relayout на signal change.
+        // Sibling slot to trigger full relayout on signal change.
         const sib = Slot({}, () => Text({}, 'tick-' + active.value))
 
         mount(() => View({},
@@ -200,7 +199,7 @@ final class ReactivityTests: XCTestCase {
                            "text-\(i) green initially")
         }
 
-        // Переключаем на средний — все должны переключиться корректно.
+        // Select middle — all should switch correctly.
         _ = engine.eval("__select(2)")
         flushMicrotasks()
         XCTAssertEqual(cgColorHex(textColor(of: textLayers[0])), "#00FF00")
@@ -209,7 +208,7 @@ final class ReactivityTests: XCTestCase {
         XCTAssertEqual(cgColorHex(textColor(of: textLayers[3])), "#00FF00")
         XCTAssertEqual(cgColorHex(textColor(of: textLayers[4])), "#00FF00")
 
-        // Последний.
+        // Last one.
         _ = engine.eval("__select(4)")
         flushMicrotasks()
         XCTAssertEqual(cgColorHex(textColor(of: textLayers[0])), "#00FF00")
@@ -218,10 +217,10 @@ final class ReactivityTests: XCTestCase {
 
     // MARK: - Computed
 
-    /// Computed = signal-производный. Patch должен фолловить через цепочку.
+    /// Computed = signal-derived. Patch must follow through the chain.
     func testComputedDrivesPatches() {
         let (engine, renderer, root) = makeFixture()
-        _ = renderer  // удерживаем — bridge капчурит weak
+        _ = renderer  // retain — bridge captures weakly
         let script = """
         const base = signal(1)
         const doubled = computed(() => base.value * 2)
@@ -256,7 +255,7 @@ final class ReactivityTests: XCTestCase {
 
     func testReactiveTextContentUpdatesAndRelayoutsCorrectly() {
         let (engine, renderer, root) = makeFixture()
-        _ = renderer  // удерживаем — bridge капчурит weak
+        _ = renderer  // retain — bridge captures weakly
         let script = """
         const label = signal('short')
         mount(() => View({},
@@ -279,13 +278,13 @@ final class ReactivityTests: XCTestCase {
                        "text content should reflect signal value")
     }
 
-    // MARK: - Opacity / backgroundColor через sibling-rebuild
+    // MARK: - Opacity / backgroundColor through sibling-rebuild
 
-    /// Аналогично color: opacity и backgroundColor thunk'и не должны
-    /// сбрасываться при relayout, вызванном sibling slot'ом.
+    /// Same as color: opacity and backgroundColor thunks must not
+    /// be reset on a relayout caused by a sibling slot.
     func testOpacityAndBackgroundSurviveSiblingRebuild() {
         let (engine, renderer, root) = makeFixture()
-        _ = renderer  // удерживаем — bridge капчурит weak
+        _ = renderer  // retain — bridge captures weakly
         let script = """
         const toggle = signal(false)
         const sib = Slot({}, () => Text({}, toggle.value ? 'on' : 'off'))
@@ -310,9 +309,9 @@ final class ReactivityTests: XCTestCase {
         XCTAssertEqual(Double(target?.opacity ?? -1), 1.0, accuracy: 0.001)
         XCTAssertEqual(cgColorHex(target?.backgroundColor), "#00FF00")
 
-        // Несколько switch'ей подряд в одном tick'е — pendingEffects схлопывает
-        // дубликаты, эффект отрабатывает один раз для финального значения.
-        // 3 flip'а из true: true→false→true→false. Финал = false.
+        // Several switches in a row in one tick — pendingEffects collapses
+        // duplicates, the effect runs once for the final value.
+        // 3 flips from true: true→false→true→false. Final = false.
         _ = engine.eval("__flip(); __flip(); __flip()")
         flushMicrotasks()
         XCTAssertEqual(Double(target?.opacity ?? -1), 0.3, accuracy: 0.001,
@@ -322,12 +321,12 @@ final class ReactivityTests: XCTestCase {
 
     // MARK: - Slot show/hide
 
-    /// Когда Slot выкидывает узел (показывает null), его binding-scope'ы
-    /// должны dispose'иться — последующее signal change'ы не должны
-    /// падать с warning'ами и не должны патчить layer которого больше нет.
+    /// When a Slot drops a node (renders null), its binding scopes
+    /// must be disposed — subsequent signal changes must not
+    /// throw warnings and must not patch a layer that no longer exists.
     func testHiddenSlotChildrenStopReceivingPatches() {
         let (engine, renderer, root) = makeFixture()
-        _ = renderer  // удерживаем — bridge капчурит weak
+        _ = renderer  // retain — bridge captures weakly
         let script = """
         const visible = signal(true)
         const color = signal('#FF0000')
@@ -351,18 +350,18 @@ final class ReactivityTests: XCTestCase {
         flushMicrotasks()
         XCTAssertEqual(slotWrapper?.sublayers?.count ?? 0, 0, "text removed")
 
-        // После удаления update'ы color не должны падать.
+        // After removal, color updates must not crash.
         _ = engine.eval("__setColor('#00FF00')")
         flushMicrotasks()
-        // По-прежнему пусто, ничего не воскресло.
+        // Still empty, nothing came back to life.
         XCTAssertEqual(slotWrapper?.sublayers?.count ?? 0, 0, "no zombie text")
     }
 
-    /// Snapshot-цикл: показали → спрятали → показали. Re-mount должен
-    /// зацепить новые thunk-binding'и; patches на новом дереве работают.
+    /// Snapshot cycle: shown → hidden → shown. Re-mount must
+    /// attach new thunk bindings; patches on the new tree work.
     func testShowHideShowReattachesPatches() {
         let (engine, renderer, root) = makeFixture()
-        _ = renderer  // удерживаем — bridge капчурит weak
+        _ = renderer  // retain — bridge captures weakly
         let script = """
         const show = signal(true)
         const c = signal('#111111')
@@ -397,11 +396,11 @@ final class ReactivityTests: XCTestCase {
 
     // MARK: - Stress: multiple signal changes batched
 
-    /// N signal change'ей в одном tick'е должны схлопнуться в один flush
-    /// и дать корректный финальный state без промежуточных мельканий.
+    /// N signal changes in one tick must collapse into one flush
+    /// and produce the correct final state without intermediate flickers.
     func testBatchedSignalChangesYieldFinalValue() {
         let (engine, renderer, root) = makeFixture()
-        _ = renderer  // удерживаем — bridge капчурит weak
+        _ = renderer  // retain — bridge captures weakly
         let script = """
         const s = signal('a')
         mount(() => View({},
@@ -424,16 +423,16 @@ final class ReactivityTests: XCTestCase {
 
     // MARK: - Same-signal touching outer scope
 
-    /// Если outer scope (e.g. mount-component) читает signal.value напрямую,
-    /// mount-эффект пересоберёт всё дерево. Это валидный режим — проверяем
-    /// что не падает и не дублирует bindings.
+    /// If an outer scope (e.g. mount-component) reads signal.value directly,
+    /// the mount-effect rebuilds the whole tree. This is a valid mode — verify
+    /// it doesn't crash and doesn't duplicate bindings.
     func testOuterSignalReadCausesFullRebuild() {
         let (engine, renderer, root) = makeFixture()
-        _ = renderer  // удерживаем — bridge капчурит weak
+        _ = renderer  // retain — bridge captures weakly
         let script = """
         const v = signal(1)
         mount(() => {
-          v.value  // ← подписка mount-effect'а
+          v.value  // ← mount-effect subscribes here
           return View({},
             Text({ color: () => v.value > 5 ? '#00FF00' : '#FF0000' }, String(v.value))
           )
@@ -447,22 +446,22 @@ final class ReactivityTests: XCTestCase {
         _ = engine.eval("__set(10)")
         flushMicrotasks()
 
-        // После full rebuild — новый text layer, но color must match новое
-        // условие. Адресуем заново через DFS (ids изменились, но позиция
-        // в дереве та же).
+        // After full rebuild — a new text layer, but color must match the new
+        // condition. Re-address via DFS (ids changed, but the tree position
+        // is the same).
         XCTAssertEqual(cgColorHex(textColor(of: descend(root, [0, 0]))), "#00FF00",
                        "after outer rebuild text reflects new condition")
     }
 
     // MARK: - Nested deep tree
 
-    /// Sibling slot rebuild не должен фронтально перетирать стили
-    /// глубоко-вложенных узлов в другом поддереве. Без нашего фикса
-    /// applyAll рекурсивно прошёл бы весь дерево и каждый Text перерисовал
-    /// бы из stale `next.style.color`.
+    /// A sibling slot rebuild must not blanket-overwrite styles of
+    /// deeply nested nodes in another subtree. Without our fix
+    /// applyAll would recurse through the whole tree and repaint every Text
+    /// from stale `next.style.color`.
     func testDeepNestedSubtreeSurvivesSiblingRebuild() {
         let (engine, renderer, root) = makeFixture()
-        _ = renderer  // удерживаем — bridge капчурит weak
+        _ = renderer  // retain — bridge captures weakly
         let script = """
         const tick = signal(0)
         const accent = signal('#AA0000')
@@ -483,13 +482,13 @@ final class ReactivityTests: XCTestCase {
         let deepText = descend(root, [0, 1, 0, 0, 0])
         XCTAssertEqual(cgColorHex(textColor(of: deepText)), "#AA0000")
 
-        // Меняем accent — Text должен подхватить.
+        // Change accent — Text must pick it up.
         _ = engine.eval("__set('#00AAFF')")
         flushMicrotasks()
         XCTAssertEqual(cgColorHex(textColor(of: deepText)), "#00AAFF")
 
-        // Теперь триггерим sibling slot rebuild'ы. Они НЕ должны откатить
-        // цвет — это и есть классический «мелькающий» патч.
+        // Now trigger sibling slot rebuilds. They must NOT revert
+        // the color — this is the classic "flickering" patch.
         for _ in 0..<5 {
             _ = engine.eval("__tick()")
             flushMicrotasks()
@@ -500,20 +499,20 @@ final class ReactivityTests: XCTestCase {
 
     // MARK: - Mixed static + reactive
 
-    /// Mixed узел: один проп статический, второй — thunk. Sibling rebuild
-    /// не должен затронуть НИ статический (он остаётся), НИ thunked (он в
-    /// patch-state'е).
+    /// Mixed node: one prop static, the other a thunk. A sibling rebuild
+    /// must touch NEITHER the static one (it stays) NOR the thunked one (it
+    /// is in patch state).
     func testMixedStaticAndReactivePropsCoexist() {
         let (engine, renderer, root) = makeFixture()
-        _ = renderer  // удерживаем — bridge капчурит weak
+        _ = renderer  // retain — bridge captures weakly
         let script = """
         const v = signal(false)
         const sib = Slot({}, () => Text({}, String(v.value)))
         mount(() => View({},
           sib,
           View({
-            backgroundColor: '#123456',     // статика
-            opacity: () => v.value ? 1 : 0.5  // реактив
+            backgroundColor: '#123456',     // static
+            opacity: () => v.value ? 1 : 0.5  // reactive
           })
         ))
         globalThis.__flip = function () { v.value = !v.value }

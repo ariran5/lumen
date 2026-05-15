@@ -7,10 +7,10 @@ import ImageIO
 /// `lumen.imagePicker.pick({limit}) → Promise<Asset | Asset[] | null>`
 ///
 /// `Asset = {uri: 'file:///tmp/lumen-picker/<uuid>.<ext>', width, height}`.
-/// При `limit > 1` возвращает массив. Если пользователь отменил выбор — `null`.
+/// With `limit > 1` returns an array. If user cancels — `null`.
 ///
-/// PHPickerViewController не требует `NSPhotoLibraryUsageDescription` —
-/// out-of-process picker от Photos.framework, доступа к library у фастаппа нет.
+/// PHPickerViewController doesn't require `NSPhotoLibraryUsageDescription` —
+/// out-of-process picker from Photos.framework, the fast-app has no library access.
 extension JSEngine {
     func installImagePickerBridge() {
         guard let lumen = context.objectForKeyedSubscript("lumen") else { return }
@@ -19,11 +19,11 @@ extension JSEngine {
         let originRef = origin
         let nativePick: @convention(block) (JSValue?, JSValue, JSValue) -> Void = { config, resolve, reject in
             Task { @MainActor in
-                // Photos gate. PHPickerViewController технически работает
-                // без `NSPhotoLibraryUsageDescription` (out-of-process picker),
-                // но мы всё равно gate'им — origin должен явно подтвердить
-                // что хочет показывать picker. Без этого untrusted сайт мог бы
-                // спамить picker'ами для phishing UI.
+                // Photos gate. PHPickerViewController technically works
+                // without `NSPhotoLibraryUsageDescription` (out-of-process picker),
+                // but we gate anyway — origin must explicitly confirm
+                // it wants to show the picker. Without this an untrusted site could
+                // spam pickers for phishing UI.
                 let grant = await PermissionStore.shared.request(origin: originRef, capability: .photos)
                 guard grant == .granted else {
                     _ = resolve.call(withArguments: [NSNull()])
@@ -65,7 +65,7 @@ extension JSEngine {
 }
 
 /// Off-main accumulator for image dicts. Lock-protected NSLock + array.
-/// Marked `@unchecked Sendable` чтобы передаваться в `@Sendable` closures
+/// Marked `@unchecked Sendable` so it can be passed into `@Sendable` closures
 /// (`loadFileRepresentation` callback, `group.notify`).
 private final class PickAccumulator: @unchecked Sendable {
     private let lock = NSLock()

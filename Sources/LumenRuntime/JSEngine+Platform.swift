@@ -100,10 +100,10 @@ extension JSEngine {
                 sheet.detents = [.medium(), .large()]
             }
             sheet.prefersGrabberVisible = true
-            // НЕ ставим preferredCornerRadius — на iOS 26 system делает
-            // per-corner morph (top corners остаются rounded при edge-attach
-            // к .large, side/bottom corners выпрямляются). Наш explicit value
-            // фиксирует все 4 угла одинаково и ломает этот morph.
+            // Do NOT set preferredCornerRadius — on iOS 26 the system does
+            // per-corner morph (top corners stay rounded on edge-attach
+            // to .large, side/bottom corners straighten). Our explicit value
+            // pins all 4 corners equally and breaks this morph.
         }
 
         if let onCloseValue, !onCloseValue.isUndefined {

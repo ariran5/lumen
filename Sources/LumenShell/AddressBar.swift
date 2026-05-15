@@ -1,22 +1,22 @@
 import SwiftUI
 
 /// Bottom-anchored Liquid Glass address bar.
-/// Два визуальных режима:
+/// Two visual modes:
 ///   full    — full pill: [🏠] [icon · TextField] [✦]
-///   compact — disc 44×44 с одной leading-иконкой (lock/sparkle/host-letter).
-///             Tap на disc → isFocused=true → разворачивается + клавиатура,
-///             URL pre-selected (через нативный UITextField).
+///   compact — 44×44 disc with a single leading icon (lock/sparkle/host-letter).
+///             Tap on disc → isFocused=true → expands + keyboard,
+///             URL pre-selected (via native UITextField).
 ///
-/// Используется как:
+/// Used as:
 ///   - home / web → full mode
-///   - fast-app (сторонний) → compact, чтобы не закрывать контент, но
-///     сохранить отступление обратно (через home button или ввод URL'а).
+///   - fast-app (third-party) → compact, to avoid covering content while
+///     preserving the way back (via home button or URL entry).
 struct AddressBar: View {
     @Bindable var tab: TabModel
     @Binding var isFocused: Bool
     var onOpenLibrary: () -> Void = {}
-    /// Compact-pill tap callback: вместо разворачивания строки в полную
-    /// шелл открывает StartSheet с табами + поиском внизу.
+    /// Compact-pill tap callback: instead of expanding the row to full,
+    /// the shell opens StartSheet with tabs + search at the bottom.
     var onTapCompactPill: () -> Void = {}
     var isCompact: Bool = false
 
@@ -66,9 +66,9 @@ struct AddressBar: View {
 
     private var compactPill: some View {
         Button {
-            // Tap по compact-pill теперь открывает StartSheet (overlay с
-            // tabs + search), а не разворачивает в полный bar. Старый
-            // full-mode остаётся для домашней страницы / web-режима.
+            // Tap on compact-pill now opens StartSheet (overlay with
+            // tabs + search) instead of expanding into the full bar. The old
+            // full-mode is kept for the home page / web mode.
             onTapCompactPill()
         } label: {
             ZStack {
@@ -115,7 +115,7 @@ struct AddressBar: View {
                     .opacity(isFocused ? 0 : 1)
                     .allowsHitTesting(false)
 
-                // Native UITextField — selectAll работает (SwiftUI TextField не умеет).
+                // Native UITextField — selectAll works (SwiftUI TextField can't).
                 URLTextField(
                     text: $tab.addressInput,
                     isFocused: $isFocused,

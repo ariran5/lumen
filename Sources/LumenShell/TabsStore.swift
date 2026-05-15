@@ -1,24 +1,24 @@
 import Foundation
 import Observation
 
-/// Multi-tab модель браузера. Держит порядок таб, активную табу, операции
-/// open / close / switch. Каждый TabModel — независимое состояние
+/// Multi-tab model of the browser. Holds tab order, active tab, and operations
+/// open / close / switch. Each TabModel is independent state
 /// (mode, addressInput, etc).
 ///
-/// Сейчас используется SwiftUI BrowserView'ом; в будущем тот же store
-/// проброшен в JS shell через `lumen.tabs.*` для дог-фудинга.
+/// Currently used by SwiftUI BrowserView; in the future the same store
+/// is exposed to the JS shell via `lumen.tabs.*` for dogfooding.
 @MainActor
 @Observable
 final class TabsStore {
-    /// Browser-wide singleton. SwiftUI shell + JS-bridge (`lumen.tabs.*`)
-    /// дёргают одну и ту же модель.
+    /// Browser-wide singleton. SwiftUI shell + JS bridge (`lumen.tabs.*`)
+    /// hit the same model.
     static let shared = TabsStore()
 
     private(set) var tabs: [TabModel] = []
     var activeID: UUID?
 
-    /// Дебаунс: несколько свойств меняющихся в одной runloop-итерации
-    /// должны дать ОДИН fire("tabs"), а не N.
+    /// Debounce: multiple properties changing in one runloop iteration
+    /// must produce ONE fire("tabs"), not N.
     @ObservationIgnored private var rebroadcastScheduled = false
 
     init() {
@@ -28,10 +28,10 @@ final class TabsStore {
         startBroadcast()
     }
 
-    /// Авто-broadcast в JS-канал 'tabs' через Observation. Любое изменение
-    /// tabs/activeID/title/loading/URL у любой таб → fire("tabs") → все
-    /// fast-app'ы с `lumen.tabs.subscribe(...)` получают callback.
-    /// После каждого срабатывания re-arm'ится.
+    /// Auto-broadcast to the JS 'tabs' channel via Observation. Any change
+    /// to tabs/activeID/title/loading/URL of any tab → fire("tabs") → every
+    /// fast-app with `lumen.tabs.subscribe(...)` gets a callback.
+    /// Re-arms after each firing.
     private func startBroadcast() {
         withObservationTracking { [weak self] in
             guard let self else { return }
@@ -43,18 +43,18 @@ final class TabsStore {
                 _ = tab.currentURL
             }
         } onChange: { [weak self] in
-            // onChange может быть Sendable closure; но фактически он зовётся
-            // synchronously внутри мутации, которая идёт на MainActor.
+            // onChange may be a Sendable closure; but in practice it's called
+            // synchronously inside a mutation that runs on MainActor.
             MainActor.assumeIsolated {
                 guard let self, !self.rebroadcastScheduled else { return }
                 self.rebroadcastScheduled = true
                 Task { @MainActor [weak self] in
                     guard let self else { return }
                     self.rebroadcastScheduled = false
-                    // Title визита приходит ПОЗЖЕ commit() (после загрузки страницы).
-                    // Каждый tabs-broadcast — точка где можно докинуть title в
-                    // history-запись. updateTitle идемпотентен: если у entry уже
-                    // есть title, no-op.
+                    // The visit title arrives AFTER commit() (once the page loads).
+                    // Every tabs-broadcast is a point where we can attach the title to
+                    // the history record. updateTitle is idempotent: if the entry already
+                    // has a title, no-op.
                     for tab in self.tabs {
                         if !tab.pageTitle.isEmpty, let url = tab.currentURL {
                             HistoryStore.shared.updateTitle(
@@ -97,7 +97,7 @@ final class TabsStore {
         let wasActive = (activeID == id)
         tabs.remove(at: idx)
 
-        // Никогда не оставляем 0 таб — пользователь должен видеть хотя бы стартовую.
+        // Never leave 0 tabs — the user must see at least the start tab.
         if tabs.isEmpty {
             let new = TabModel()
             tabs.append(new)

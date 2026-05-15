@@ -1,135 +1,264 @@
-// Send-flow в bottom-sheet'е (UISheetPresentationController, height='large').
-// Это альтернатива push-странице: модальная форма поверх tab-bar'а, swipe-down
-// чтобы закрыть, без необходимости разрушать стек навигации. Хорошо ложится
-// под action — юзер видит контекст под sheet'ом, и cancel = смахнуть вниз.
+// Transfer. Bottom-sheet in T-Bank style: large amount in the hero,
+// SheetRows to pick "To" and "From", presets, sticky CTA at the bottom.
+// Amount entry goes through the banking Keypad, not the system keyboard —
+// that's what users expect from a banking app.
 
 import { PillButton } from '../components/pill-button'
+import { SheetShell } from '../components/sheet-shell'
+import { SheetRow } from '../components/sheet-row'
+import { AmountDisplay, rawToCents } from '../components/amount-display'
+import { Keypad, applyKey, applyBackspace } from '../components/keypad'
 import { colors, radius, space } from '../lib/colors'
+import { money, moneyShort } from '../lib/format'
 import { makeTransfer, BankAPIError } from '../services/bank-api'
 import { balanceCents } from '../state/account'
 import { sheetOpen } from '../state/ui'
 
+const PRESETS: number[] = [1000_00, 5000_00, 10_000_00]
+
+interface Recipient {
+  name: string
+  hint: string  // last 4 digits or a mask
+}
+
+const DEFAULT_RECIPIENT: Recipient = {
+  name: 'Михаил К.',
+  hint: '+7 ··· ··· 42-19',
+}
+
 export function openSendSheet(): void {
-  // Local form state, живёт пока sheet открыт. Каждый показ — новая копия.
-  const recipient = signal('')
-  const iban = signal('')
-  const amountStr = signal('')
+  // Local state lives as long as the sheet is open.
+  const raw = signal('')
+  const recipient = signal<Recipient>(DEFAULT_RECIPIENT)
   const note = signal('')
-  const isSubmitting = signal(false)
-  const errorMessage = signal<string | null>(null)
+  const submitting = signal(false)
+  const error = signal<string | null>(null)
 
-  const amountCents = computed(() => {
-    const raw = parseFloat(amountStr.value.replace(/,/g, '.'))
-    if (!isFinite(raw) || raw <= 0) return 0
-    return Math.round(raw * 100)
-  })
+  const cents = computed<number>(() => rawToCents(raw.value))
 
-  const canSubmit = computed(() =>
-    !isSubmitting.value &&
-    recipient.value.trim().length > 0 &&
-    iban.value.trim().length > 0 &&
-    amountCents.value > 0 &&
-    amountCents.value <= balanceCents.value)
+  const canSubmit = computed<boolean>(() =>
+    !submitting.value &&
+    cents.value > 0 &&
+    cents.value <= balanceCents.value,
+  )
 
   async function submit() {
-    errorMessage.value = null
-    isSubmitting.value = true
+    error.value = null
+    submitting.value = true
     try {
-      if (amountCents.peek() > 100_00 && lumen.biometrics.available() !== 'none') {
-        const ok = await lumen.biometrics.authenticate('Confirm transfer')
-        if (!ok) { errorMessage.value = 'Authentication cancelled'; return }
+      // Biometric guard on large transfers (>1 000 ₽).
+      if (cents.peek() > 1000_00 && lumen.biometrics.available() !== 'none') {
+        const ok = await lumen.biometrics.authenticate('Подтвердите перевод')
+        if (!ok) { error.value = 'Подтверждение отменено'; return }
       }
       await makeTransfer({
-        toIBAN: iban.peek().trim(),
-        recipientName: recipient.peek().trim(),
-        amountCents: amountCents.peek(),
+        toIBAN: 'RU82 4040 5552 ' + (recipient.peek().hint.match(/\d{2}-\d{2}/)?.[0] ?? '00-00'),
+        recipientName: recipient.peek().name,
+        amountCents: cents.peek(),
         note: note.peek().trim() || undefined,
       })
       lumen.haptics('success')
-      // Sheet закрываем через alert dismiss — простейший способ; в реальной
-      // UI лучше иметь programmatic dismiss API. Sheet примет swipe-down.
-      lumen.alert({ title: 'Sent', message: 'Transfer queued. Swipe down to close.' })
+      lumen.alert({
+        title: 'Готово',
+        message: `${money(cents.peek())} отправлены ${recipient.peek().name}.\nСмахните вниз, чтобы закрыть.`,
+      })
     } catch (e) {
       const msg = e instanceof BankAPIError ? e.message : (e as Error).message ?? String(e)
-      errorMessage.value = msg
+      error.value = msg
       lumen.haptics('error')
     } finally {
-      isSubmitting.value = false
+      submitting.value = false
     }
   }
 
   sheetOpen.value = true
   lumen.bottomSheet({
-    // medium — sheet начинает с middle-detent, задний VC уменьшается с
-    // параллаксом (iOS 26 card-stack). User может drag'нуть до large.
-    height: 'medium',
+    height: 'large',
     onClose: () => { sheetOpen.value = false },
-    // Без backgroundColor — iOS 26 sheet сам показывает Liquid Glass
-    // material под content'ом. Свой непрозрачный фон бы это перекрыл и
-    // на morph'е к .large detent'у не дал бы system'е сделать transition
-    // к opaque-сэндвичу.
-    content: View(
-      { flex: 1 },
-      grabber(),
-      ScrollView(
-        {
-          flex: 1,
-          paddingBottom: Math.max(lumen.safeArea.bottom, space.lg),
-          paddingLeft: space.lg,
-          paddingRight: space.lg,
-          gap: space.lg,
+    content: SheetShell(
+      {
+        title: 'Перевод',
+        subtitle: 'С Tinkoff Black ·· 4422',
+        footer: PillButton({
+          label: 'Перевести',
+          disabled: () => !canSubmit.value,
+          onTap: submit,
+        }),
+      },
+
+      // Big amount
+      AmountDisplay({
+        raw,
+        accent: true,
+        caption: () => {
+          const c = cents.value
+          if (c === 0) return 'Доступно ' + moneyShort(balanceCents.value)
+          if (c > balanceCents.value) return 'Превышает доступный баланс'
+          return 'Доступно ' + moneyShort(balanceCents.value - c)
         },
-        Text({ fontSize: 22, fontWeight: '800', color: colors.textPrimary }, 'Send money'),
-        formField('Recipient', recipient, 'Full name', 'words'),
-        formField('IBAN', iban, 'IL21 0040 5000 1234 5678 9012', 'characters'),
-        formField('Amount (USD)', amountStr, '0.00', 'none', 'decimal'),
-        formField('Note (optional)', note, 'Coffee, rent, …', 'sentences'),
-        Slot({}, () => errorMessage.value
-          ? View(
-              {
-                backgroundColor: '#3A1F1F', borderColor: colors.negative, borderWidth: 1,
-                borderRadius: radius.control, padding: space.md,
-              },
-              Text({ color: colors.negative, fontSize: 13 }, errorMessage.value!),
-            )
-          : null),
-        PillButton({ label: 'Send', disabled: () => !canSubmit.value, onTap: submit }),
+      }),
+
+      // Presets
+      View(
+        { flexDirection: 'row', gap: space.sm },
+        ...PRESETS.map(c => presetChip(c, raw)),
+        allChip(raw, balanceCents),
+      ),
+
+      // Recipient + message — selectable rows
+      View(
+        { gap: space.sm },
+        Slot({}, () => SheetRow({
+          icon: '👤',
+          iconTint: colors.tileMobile,
+          label: recipient.value.name,
+          sublabel: recipient.value.hint,
+          onTap: () => openRecipientPicker(recipient),
+        })),
+        SheetRow({
+          icon: '💳',
+          iconTint: colors.cardBlack,
+          label: 'Tinkoff Black',
+          sublabel: () => '·· 4422 · ' + moneyShort(balanceCents.value),
+          onTap: () => lumen.alert({
+            title: 'Источник перевода',
+            message: 'Выбор другого счёта — в разработке.',
+          }),
+        }),
+        Slot({}, () => SheetRow({
+          icon: '✏️',
+          iconTint: colors.tilePay,
+          label: 'Сообщение',
+          sublabel: note.value ? note.value : 'Необязательно',
+          onTap: () => openNoteEditor(note),
+        })),
+      ),
+
+      // Error block
+      Slot({}, () => error.value
+        ? errorBlock(error.value)
+        : null,
+      ),
+
+      // Keypad — fixed 4 rows at the bottom of the scroll area.
+      Keypad({
+        onKey: k => { raw.value = applyKey(raw.peek(), k) },
+        onBackspace: () => { raw.value = applyBackspace(raw.peek()) },
+      }),
+    ),
+  })
+}
+
+function presetChip(c: number, raw: Signal<string>): RenderNode {
+  return Pressable(
+    {
+      onTap: () => {
+        lumen.haptics('light')
+        raw.value = String(Math.floor(c / 100))
+      },
+      // 92×44 → radius strictly height/2 = 22 (Lumen/iOS 26 doesn't clamp).
+      width: 92, height: 44, borderRadius: 22,
+      backgroundColor: colors.surface,
+      borderWidth: 1, borderColor: colors.border,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    Text({ fontSize: 14, fontWeight: '600', color: colors.textSecondary }, moneyShort(c)),
+  )
+}
+
+function allChip(raw: Signal<string>, src: Signal<number>): RenderNode {
+  return Pressable(
+    {
+      onTap: () => {
+        lumen.haptics('light')
+        raw.value = String(Math.floor(src.peek() / 100))
+      },
+      width: 60, height: 44, borderRadius: 22,
+      backgroundColor: colors.accentSoft,
+      borderWidth: 1, borderColor: colors.accent,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    Text({ fontSize: 14, fontWeight: '700', color: colors.accent }, 'Все'),
+  )
+}
+
+function errorBlock(message: string): RenderNode {
+  return View(
+    {
+      flexDirection: 'row', alignItems: 'center', gap: space.md,
+      backgroundColor: '#2A1518',
+      borderColor: colors.negative,
+      borderWidth: 1,
+      borderRadius: radius.control,
+      paddingTop: space.md, paddingBottom: space.md,
+      paddingLeft: space.md, paddingRight: space.md,
+    },
+    Text({ fontSize: 18 }, '⚠'),
+    Text({ flex: 1, color: colors.negative, fontSize: 13, fontWeight: '600' }, message),
+  )
+}
+
+// ── Sub-sheets ─────────────────────────────────────────────────
+
+const QUICK_RECIPIENTS: Recipient[] = [
+  { name: 'Михаил К.',  hint: '+7 ··· ··· 42-19' },
+  { name: 'Анна П.',    hint: '+7 ··· ··· 88-04' },
+  { name: 'Семья',      hint: 'Анна и Лев · 2 чел.' },
+  { name: 'Иван Сидор', hint: 'СБП · Сбер ·· 2210' },
+]
+
+function openRecipientPicker(bind: Signal<Recipient>): void {
+  lumen.bottomSheet({
+    height: 'medium',
+    content: SheetShell(
+      { title: 'Кому', subtitle: 'Недавние получатели' },
+      View(
+        { gap: space.sm },
+        ...QUICK_RECIPIENTS.map(r => SheetRow({
+          icon: '👤',
+          iconTint: colors.tileMobile,
+          label: r.name,
+          sublabel: r.hint,
+          selected: r.name === bind.peek().name,
+          onTap: () => {
+            bind.value = r
+            lumen.haptics('soft')
+          },
+        })),
       ),
     ),
   })
 }
 
-function grabber(): RenderNode {
-  return View(
-    { alignItems: 'center', paddingBottom: space.sm },
-    View({ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border }),
-  )
-}
+function openNoteEditor(bind: Signal<string>): void {
+  const local = signal(bind.peek())
 
-function formField(
-  label: string,
-  bind: Signal<string>,
-  placeholder: string,
-  caps: Autocapitalize = 'none',
-  kb: KeyboardType = 'default',
-): RenderNode {
-  return View(
-    { gap: space.xs },
-    Text({ fontSize: 12, color: colors.textTertiary, fontWeight: '600' }, label.toUpperCase()),
-    TextInput({
-      value: bind.value,
-      placeholder,
-      keyboardType: kb,
-      autocapitalize: caps,
-      autocorrect: caps === 'sentences' || caps === 'words',
-      onChange: e => { bind.value = e.value },
-      height: 44,
-      fontSize: 15,
-      color: colors.textPrimary,
-      backgroundColor: colors.surfaceElevated,
-      borderRadius: radius.control,
-      paddingLeft: space.md,
-      paddingRight: space.md,
-    }),
-  )
+  lumen.bottomSheet({
+    height: 'medium',
+    content: SheetShell(
+      {
+        title: 'Сообщение',
+        subtitle: 'Видит только получатель',
+        footer: PillButton({
+          label: 'Сохранить',
+          onTap: () => {
+            bind.value = local.peek().trim()
+            lumen.haptics('soft')
+          },
+        }),
+      },
+      TextInput({
+        value: local.value,
+        placeholder: 'Например, «За кофе»',
+        onChange: e => { local.value = e.value },
+        height: 100,
+        fontSize: 15,
+        color: colors.textPrimary,
+        backgroundColor: colors.surface,
+        borderRadius: radius.control,
+        paddingTop: space.md, paddingBottom: space.md,
+        paddingLeft: space.md, paddingRight: space.md,
+      }),
+    ),
+  })
 }

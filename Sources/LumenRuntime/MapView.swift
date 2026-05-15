@@ -2,9 +2,9 @@ import JavaScriptCore
 import MapKit
 import UIKit
 
-/// MKMapView с JS-bridged props и callback'ами.
-/// Паттерн — стандартный overlay: UIView сидит как subview hostView,
-/// frame'ом управляет Renderer через flex layout. Те же шаги что у
+/// MKMapView with JS-bridged props and callbacks.
+/// Pattern is the standard overlay: UIView sits as a subview of hostView,
+/// Renderer manages frame via flex layout. Same steps as
 /// LumenTextField / LumenBlurView / LumenScrollView.
 @MainActor
 final class LumenMapView: MKMapView, MKMapViewDelegate {
@@ -12,8 +12,8 @@ final class LumenMapView: MKMapView, MKMapViewDelegate {
     var onRegionChange: JSValue?
     var onPinTap: JSValue?
 
-    /// Игнорим первый regionDidChange после программного `setRegion(...)`,
-    /// иначе zoomToFit от JS → callback в JS → JS пушит region.value → loop.
+    /// Ignore the first regionDidChange after a programmatic `setRegion(...)`,
+    /// otherwise zoomToFit from JS → callback to JS → JS pushes region.value → loop.
     private var suppressNextRegionEvent = false
 
     override init(frame: CGRect) {
@@ -41,8 +41,8 @@ final class LumenMapView: MKMapView, MKMapViewDelegate {
             }
         }
 
-        // Pins: тривиальный diff по id+coord. Для серьёзного маршрута/heat-map
-        // лучше keyed-reuse, но для типового UI достаточно.
+        // Pins: trivial diff by id+coord. For serious routing/heat-map
+        // keyed-reuse is better, but for typical UI this is enough.
         let existing = annotations.compactMap { $0 as? LumenPinAnnotation }
         let nextKeys = Set(pins.map { $0.signature })
         let existingKeys = Set(existing.map { $0.signature })
@@ -113,8 +113,8 @@ struct MapPinSpec: Equatable {
     }
 }
 
-// MKAnnotation — NSObjectProtocol, не MainActor-isolated. Делаем annotation
-// без MainActor и с immutable-данными — MapKit гоняет это между потоками.
+// MKAnnotation — NSObjectProtocol, not MainActor-isolated. Make annotation
+// without MainActor and with immutable data — MapKit moves this across threads.
 final class LumenPinAnnotation: NSObject, MKAnnotation, @unchecked Sendable {
     let spec: MapPinSpec
     init(spec: MapPinSpec) { self.spec = spec }

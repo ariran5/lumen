@@ -29,9 +29,9 @@ final class LumenPageViewController: UIViewController {
         host.backgroundColor = UIColor(red: 0.043, green: 0.043, blue: 0.059, alpha: 1)
         view = host
 
-        // contentView фуллскрин — от top до bottom. Fast-app сам уважает
-        // `lumen.safeArea.top/bottom` в своей разметке (greeting/header).
-        // Без этого мы режем верхнюю часть и host-bg торчит над контентом.
+        // contentView is fullscreen — top to bottom. Fast-app respects
+        // `lumen.safeArea.top/bottom` in its own layout (greeting/header).
+        // Without this we cut the top and host-bg shows through above content.
         let content = UIView()
         content.backgroundColor = .clear
         content.translatesAutoresizingMaskIntoConstraints = false

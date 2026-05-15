@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Минимальный горизонтальный tab-strip. Не финальный визуал — нужен чтобы
-/// видно было multi-tab capability сейчас, пока shell-as-fast-app не готов.
-/// Будущая красивая версия — на Lumen runtime.
+/// Minimal horizontal tab strip. Not the final visual — exists so the
+/// multi-tab capability is visible today while shell-as-fast-app isn't ready.
+/// The future nicer version will run on the Lumen runtime.
 struct TabBar: View {
     @Bindable var tabs: TabsStore
 

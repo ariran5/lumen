@@ -1,10 +1,10 @@
 import UIKit
 
-/// Lumen-обёртка над UIVisualEffectView. Children рендерятся в
-/// `effectView.contentView` через nested Renderer (тот же паттерн, что у
-/// ScrollView, но в режиме `.stretch` — blur не скроллит).
+/// Lumen wrapper over UIVisualEffectView. Children render into
+/// `effectView.contentView` via a nested Renderer (same pattern as
+/// ScrollView, but in `.stretch` mode — blur doesn't scroll).
 ///
-/// Используется через `kind: 'blur'`:
+/// Used via `kind: 'blur'`:
 ///   Blur({intensity: 'regular', padding: 12, borderRadius: 16},
 ///     Text('Sticky pill'),
 ///   )
@@ -72,7 +72,7 @@ final class LumenBlurView: UIView {
                 break
             }
         }
-        // Legacy system materials (iOS 17+, fallback для glass на старых OS).
+        // Legacy system materials (iOS 17+, fallback for glass on older OS).
         let style: UIBlurEffect.Style
         switch intensity {
         case "ultraThin":            style = .systemUltraThinMaterial

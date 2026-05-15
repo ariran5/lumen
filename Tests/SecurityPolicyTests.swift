@@ -1,9 +1,9 @@
 import XCTest
 @testable import Lumen
 
-/// Block 4 — HTTPS-only gate в BundleLoader.
-/// `SecurityPolicy.denyReason` решает можно ли вообще пробовать грузить
-/// fast-app с этого URL. Тесты покрывают: ok / deny / local exceptions /
+/// Block 4 — HTTPS-only gate in BundleLoader.
+/// `SecurityPolicy.denyReason` decides whether we can attempt to load
+/// a fast-app from a URL at all. Tests cover: ok / deny / local exceptions /
 /// Developer Mode override.
 final class SecurityPolicyTests: XCTestCase {
 
@@ -26,7 +26,7 @@ final class SecurityPolicyTests: XCTestCase {
     }
 
     func testLumenSchemeIsAllowed() {
-        // lumen://history и др. — system fast-apps
+        // lumen://history and friends — system fast-apps
         XCTAssertNil(SecurityPolicy.denyReason(forBundleURL: URL(string: "lumen://history")!))
     }
 
@@ -50,25 +50,24 @@ final class SecurityPolicyTests: XCTestCase {
     }
 
     func testDotLocalIsAllowed() {
-        // mDNS/Bonjour — Macbook на той же сети часто доступен как
+        // mDNS/Bonjour — a Macbook on the same network is often reachable as
         // `macbook.local`.
         XCTAssertNil(SecurityPolicy.denyReason(forBundleURL: URL(string: "http://my-mac.local:8080")!))
     }
 
     func testRFC1918PrivateRangesAreAllowed() {
-        // Типичный сценарий: iPhone в той же wifi грузит с ноута
-        // 192.168.0.107:8089
-        XCTAssertNil(SecurityPolicy.denyReason(forBundleURL: URL(string: "http://192.168.0.107:8089")!))
+        // Typical scenario: iPhone on the same wifi loads from a laptop by LAN address.
+        XCTAssertNil(SecurityPolicy.denyReason(forBundleURL: URL(string: "http://192.168.1.42:8089")!))
         XCTAssertNil(SecurityPolicy.denyReason(forBundleURL: URL(string: "http://10.0.0.42")!))
         XCTAssertNil(SecurityPolicy.denyReason(forBundleURL: URL(string: "http://172.20.0.1")!))
     }
 
     func testPublicLookalikesAreStillDenied() {
-        // 8.8.8.8, 172.15.x.x (не в 172.16-31), 172.32.x.x — публичные.
+        // 8.8.8.8, 172.15.x.x (not in 172.16-31), 172.32.x.x — public.
         XCTAssertNotNil(SecurityPolicy.denyReason(forBundleURL: URL(string: "http://8.8.8.8")!))
         XCTAssertNotNil(SecurityPolicy.denyReason(forBundleURL: URL(string: "http://172.15.0.1")!))
         XCTAssertNotNil(SecurityPolicy.denyReason(forBundleURL: URL(string: "http://172.32.0.1")!))
-        // 169.254.x.x — link-local, не RFC1918; пока не разрешаем.
+        // 169.254.x.x — link-local, not RFC1918; not allowed for now.
         XCTAssertNotNil(SecurityPolicy.denyReason(forBundleURL: URL(string: "http://169.254.1.1")!))
     }
 

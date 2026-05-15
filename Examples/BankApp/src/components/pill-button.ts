@@ -1,24 +1,25 @@
-// PillButton — primary CTA. Accent fill, white label, round pill shape.
+// PillButton — primary CTA in T-Bank style: chunky yellow pill
+// with black type, 56pt tall (compact = 44pt). Banking standard:
+// primary action is prominent and easy to tap, not a "web button".
 //
-// ВНИМАНИЕ к багу ядра: thunk на `backgroundColor` parent View'а ломает
-// рендер дочерних Text'ов. Поэтому здесь backgroundColor СТАТИЧЕН, а
-// disabled-визуализация — через `opacity` (для неё patchProp работает).
+// HEADS UP — core bug: a thunk on the parent View's `backgroundColor`
+// breaks rendering of child Texts. So backgroundColor is STATIC,
+// and the disabled visual uses `opacity` (patchProp works for that).
 
-import { colors, radius, space } from '../lib/colors'
+import { colors } from '../lib/colors'
 
 interface PillButtonProps {
   label: string
   onTap: () => void
-  /** Disabled — серая заливка, onTap игнорится. */
+  /** Disabled — muted fill, onTap is ignored. */
   disabled?: boolean | Thunk<boolean>
-  /** Compact = меньше padding (для inline action'ов). */
+  /** Compact = 44pt instead of 56pt (for inline actions in rows). */
   compact?: boolean
 }
 
 export function PillButton(p: PillButtonProps): RenderNode {
-  const padV = p.compact ? space.sm : space.md
-  const padH = p.compact ? space.lg : space.xl
   const isDisabledThunk = typeof p.disabled === 'function'
+  const h = p.compact ? 44 : 56
 
   return Pressable(
     {
@@ -29,13 +30,12 @@ export function PillButton(p: PillButtonProps): RenderNode {
           p.onTap()
         }
       },
-      paddingTop: padV,
-      paddingBottom: padV,
-      paddingLeft: padH,
-      paddingRight: padH,
-      borderRadius: radius.pill,
+      height: h,
+      paddingLeft: 24,
+      paddingRight: 24,
+      // Pill = exactly height/2; Lumen/iOS 26 doesn't clamp larger radii.
+      borderRadius: h / 2,
       backgroundColor: colors.accent,
-      // Dim через opacity (этот thunk-патч работает). Disabled → 0.4.
       opacity: isDisabledThunk
         ? () => ((p.disabled as Thunk<boolean>)() ? 0.4 : 1)
         : (p.disabled ? 0.4 : 1),
@@ -44,9 +44,9 @@ export function PillButton(p: PillButtonProps): RenderNode {
     },
     Text(
       {
-        fontSize: 16,
+        fontSize: p.compact ? 15 : 17,
         fontWeight: '700',
-        color: colors.textPrimary,
+        color: colors.textOnAccent,
       },
       p.label,
     ),

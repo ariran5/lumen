@@ -1,14 +1,14 @@
-// Mock bank API. В реальном приложении этот слой делал бы `fetch()`
-// к backend'у через sandbox network policy (см. manifest.connect).
-// Здесь — fake-latency + immediate resolve, чтобы показать pattern:
+// Mock bank API. In a real app this layer would do `fetch()`
+// to the backend via the sandbox network policy (see manifest.connect).
+// Here — fake-latency + immediate resolve, to show the pattern:
 //
-//   • API возвращает Promise — UI ждёт `loading` signal и показывает spinner,
-//   • ошибки бросаются как throw — page ловит в try/catch,
-//   • схема входа/выхода типизирована — TypeScript ловит drift между
-//     service'ом и call-site'ом.
+//   • API returns a Promise — UI waits on a `loading` signal and shows a spinner,
+//   • errors are thrown — the page catches them in try/catch,
+//   • input/output schema is typed — TypeScript catches drift between
+//     the service and the call-site.
 //
-// `lumen.connect: []` в manifest'е значит, что fetch к чужим хостам пока
-// запрещён — для подключения live API сюда добавится host.
+// `lumen.connect: []` in the manifest means fetch to foreign hosts is currently
+// forbidden — to enable a live API, add the host here.
 
 import { addTransaction, type Tx } from '../state/transactions'
 
@@ -19,7 +19,7 @@ export interface TransferRequest {
   note?: string
 }
 
-/** Симулирует latency (200-400ms) для демонстрации loading-state'ов. */
+/** Simulates latency (200-400ms) to demo loading states. */
 function simulateLatency(): Promise<void> {
   return new Promise(resolve => {
     setTimeout(resolve, 200 + Math.random() * 200)
@@ -32,7 +32,7 @@ export class BankAPIError extends Error {
   }
 }
 
-/** Translate-выписка. Mock validate'ит IBAN формат и положительную сумму. */
+/** Transfer call. Mock-validates IBAN format and positive amount. */
 export async function makeTransfer(req: TransferRequest): Promise<Tx> {
   if (req.amountCents <= 0) {
     throw new BankAPIError('Amount must be positive', 'invalid_amount')
@@ -50,7 +50,7 @@ export async function makeTransfer(req: TransferRequest): Promise<Tx> {
   })
 }
 
-/** Mock-receive. На странице profile есть demo-кнопка для теста. */
+/** Mock-receive. The profile page has a demo button to test this. */
 export async function receiveDeposit(amountCents: number, source: string): Promise<Tx> {
   await simulateLatency()
   return addTransaction({

@@ -1,13 +1,13 @@
 import Foundation
 import JavaScriptCore
 
-/// JS-side обвязка native push-канала. См. `NativeNotifier.swift`.
+/// JS-side wrapper around native push channel. See `NativeNotifier.swift`.
 ///
 ///     const id = lumen._notify._subscribe('history', fn)
 ///     lumen._notify._unsubscribe('history', id)
 ///
-/// CoreFramework заворачивает это в удобные `lumen.history.subscribe(fn)`
-/// → возвращающий unsub-замыкание.
+/// CoreFramework wraps this into convenient `lumen.history.subscribe(fn)`
+/// → returning an unsub closure.
 extension JSEngine {
     func installNotifyBridge() {
         guard let lumen = context.objectForKeyedSubscript("lumen"),

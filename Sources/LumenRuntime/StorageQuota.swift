@@ -2,26 +2,26 @@ import Foundation
 
 /// Block 5 — storage quota tracking per origin.
 ///
-/// `lumen.storage.set(key, value)` зовёт `enforce(...)` перед записью;
-/// если новая запись + текущее used превышает limit, бросаем JS-exception.
+/// `lumen.storage.set(key, value)` calls `enforce(...)` before writing;
+/// if the new entry + current usage exceeds the limit, throw a JS exception.
 ///
-/// Size = UTF-8 bytes of key (с prefix'ом) + UTF-8 bytes of value.
-/// UserDefaults overhead на запись (binary plist) не учитываем — overhead
-/// мал, пользователю достаточно «своих» байтов.
+/// Size = UTF-8 bytes of key (with prefix) + UTF-8 bytes of value.
+/// UserDefaults write overhead (binary plist) is not counted — overhead
+/// is small, the user gets enough "own" bytes.
 enum StorageQuota {
 
-    /// Hard cap по умолчанию — 100 MB. Конкретный origin может объявить
-    /// меньше через `manifest.storage_quota`. Больше — пока нельзя без
-    /// permission upgrade flow (TODO).
+    /// Default hard cap — 100 MB. A specific origin can declare
+    /// less via `manifest.storage_quota`. More is not yet allowed without
+    /// a permission upgrade flow (TODO).
     static let defaultBytes: Int = 100 * 1024 * 1024
 
-    /// Жёсткий потолок даже для manifest-declared квот. Защита от
-    /// `storage_quota: "100GB"` в злонамеренном манифесте.
+    /// Hard ceiling even for manifest-declared quotas. Protection against
+    /// `storage_quota: "100GB"` in a malicious manifest.
     static let hardMaxBytes: Int = 1 * 1024 * 1024 * 1024  // 1 GB
 
-    /// Парсит строку из манифеста: `"100MB"`, `"1GB"`, `"512KB"`,
-    /// `"1024"` (raw bytes). Регистр case-insensitive, whitespace ok.
-    /// Возвращает nil если не распарсилось — caller fallback'ом возьмёт
+    /// Parses a string from manifest: `"100MB"`, `"1GB"`, `"512KB"`,
+    /// `"1024"` (raw bytes). Case-insensitive, whitespace ok.
+    /// Returns nil if parsing failed — caller falls back to
     /// `defaultBytes`.
     static func parse(_ raw: String?) -> Int? {
         guard let raw else { return nil }
@@ -43,26 +43,26 @@ enum StorageQuota {
             return nil
         }
 
-        // Без суффикса — трактуем как raw bytes.
+        // No suffix — treat as raw bytes.
         if let raw = Int(s), raw >= 0 {
             return min(raw, hardMaxBytes)
         }
         return nil
     }
 
-    /// Computed-limit для origin'а: manifest override → или default.
-    /// Manifest-override capped by `hardMaxBytes`.
+    /// Computed limit for an origin: manifest override → or default.
+    /// Manifest override capped by `hardMaxBytes`.
     @MainActor
     static func limit(for context: OriginContext) -> Int {
-        // OriginContext.storageQuota доступен после applyManifest.
+        // OriginContext.storageQuota available after applyManifest.
         if let manifestLimit = context.storageQuota { return manifestLimit }
         return defaultBytes
     }
 
-    /// Сумма UTF-8-байтов всех текущих UserDefaults entries с заданным
-    /// prefix'ом. O(n) по всем ключам defaults'а — терпимо т.к.
-    /// вызывается только в `set`. Если станет узким местом — кэшируем
-    /// running total в OriginContext и обновляем дельта-апдейтами.
+    /// Sum of UTF-8 bytes of all current UserDefaults entries with the given
+    /// prefix. O(n) over all defaults keys — tolerable since
+    /// called only in `set`. If this becomes a bottleneck — cache
+    /// running total in OriginContext and update via delta updates.
     static func currentUsage(prefix: String, defaults: UserDefaults = .standard) -> Int {
         var total = 0
         for (key, value) in defaults.dictionaryRepresentation() where key.hasPrefix(prefix) {
@@ -72,21 +72,21 @@ enum StorageQuota {
             } else if let data = value as? Data {
                 total += data.count
             } else {
-                // Прочие типы (Int/Bool) — заведомо мелкие, считаем 16
-                // байт как round-up. Storage API кладёт только String'и,
-                // так что в проде эта ветка не должна срабатывать.
+                // Other types (Int/Bool) — clearly small, count 16
+                // bytes as round-up. Storage API only stores Strings,
+                // so in prod this branch shouldn't fire.
                 total += 16
             }
         }
         return total
     }
 
-    /// Проверяет хватит ли места под добавление новой записи. Если ключ
-    /// уже существует — мы считаем «расход» как разницу размеров (старая
-    /// запись будет overwrite'нута, освобождая свои байты).
+    /// Checks whether there's room for a new entry. If the key
+    /// already exists — we count "cost" as the size diff (old
+    /// entry will be overwritten, freeing its bytes).
     ///
-    /// Возвращает nil если можно писать, либо строку с reason'ом для
-    /// JS-exception'а.
+    /// Returns nil if write is ok, or a string with the reason for
+    /// a JS exception.
     static func denyReason(prefix: String,
                            keyWithPrefix: String,
                            newValue: String,

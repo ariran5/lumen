@@ -1,8 +1,8 @@
 import Foundation
 
-/// Минимальный WebSocket клиент для hot-reload канала dev-server'а.
-/// Подключается к `ws://<host>:<port>/__hmr`, слушает сообщения,
-/// дёргает `onReload` на main thread когда приходит `{"type":"reload"}`.
+/// Minimal WebSocket client for the dev-server hot-reload channel.
+/// Connects to `ws://<host>:<port>/__hmr`, listens to messages,
+/// calls `onReload` on main thread when `{"type":"reload"}` arrives.
 @MainActor
 final class DevServerClient {
     var onReload: (() -> Void)?
@@ -57,7 +57,7 @@ final class DevServerClient {
                 case .success:
                     self.listen()
                 case .failure:
-                    // Disconnect/error — пробуем переподключиться через 2с.
+                    // Disconnect/error — retry reconnect after 2s.
                     self.task = nil
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
                         guard let self, !self.stopped else { return }

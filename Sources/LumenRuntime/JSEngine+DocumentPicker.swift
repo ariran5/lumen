@@ -7,15 +7,15 @@ import UniformTypeIdentifiers
 ///
 /// `PickedDocument = {uri: 'file:///tmp/lumen-docs/<uuid>.<ext>', name, size, mime?}`
 ///
-/// `types` принимает либо raw UTIs (`public.pdf`, `public.image`), либо
-/// дружелюбные алиасы (`image`, `pdf`, `text`, `data`). По умолчанию — `data`
-/// (любой файл).
+/// `types` accepts either raw UTIs (`public.pdf`, `public.image`) or
+/// friendly aliases (`image`, `pdf`, `text`, `data`). Default is `data`
+/// (any file).
 ///
-/// Файлы, выбранные из Files.app / iCloud / провайдеров (Dropbox и т.п.),
-/// приходят как security-scoped URL'ы — мы копируем их в `tmp/lumen-docs/`
-/// и отдаём JS local `file://` uri, по аналогии с imagePicker. Так фастапп
-/// не зависит от чужого scope и может прочитать файл через `fetch()` или
-/// что угодно ещё.
+/// Files picked from Files.app / iCloud / providers (Dropbox etc.)
+/// arrive as security-scoped URLs — we copy them into `tmp/lumen-docs/`
+/// and give JS a local `file://` uri, similar to imagePicker. This way the fast-app
+/// doesn't depend on an external scope and can read the file via `fetch()` or
+/// anything else.
 extension JSEngine {
     func installDocumentPickerBridge() {
         guard let lumen = context.objectForKeyedSubscript("lumen") else { return }
@@ -100,9 +100,9 @@ private final class DocumentPickerCoordinator: NSObject, UIDocumentPickerDelegat
     nonisolated func documentPicker(_ controller: UIDocumentPickerViewController,
                                     didPickDocumentsAt urls: [URL]) {
         let id = ObjectIdentifier(self)
-        // `asCopy: true` уже скопировал файлы в наш inbox; всё равно
-        // переносим в lumen-docs/ чтобы у фастаппа был стабильный uri вне
-        // зависимости от того что система сделала с inbox'ом.
+        // `asCopy: true` already copied files into our inbox; still
+        // move to lumen-docs/ so the fast-app has a stable uri regardless
+        // of what the system did with the inbox.
         let snapshot: [[String: Any]] = urls.compactMap(copyPickedDocToTmp(sourceURL:))
         DispatchQueue.main.async {
             MainActor.assumeIsolated {

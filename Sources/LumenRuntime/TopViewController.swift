@@ -22,12 +22,12 @@ enum TopViewController {
         if let tab = controller as? UITabBarController {
             return walk(tab.selectedViewController) ?? tab
         }
-        // Спускаемся через children. Это критично для случая когда наш UIKit
-        // content (FastAppHost'овский UINavigationController) висит как child
-        // VC у SwiftUI'евского UIHostingController. Если present'ить от host
-        // controller'а — iOS 26 sheet'у морф edge'ей мешает SwiftUI слой
-        // поверх, и transition отстаёт от drag'а ("догоняет"). Present от
-        // самого UIKit VC обходит SwiftUI bridge.
+        // Descend through children. Critical for the case when our UIKit
+        // content (FastAppHost's UINavigationController) hangs as a child
+        // VC of a SwiftUI UIHostingController. Presenting from the host
+        // controller — iOS 26 sheet's edge morph is blocked by the SwiftUI
+        // layer on top, and transition lags behind the drag ("catches up").
+        // Present from the UIKit VC itself bypasses the SwiftUI bridge.
         for child in controller.children {
             if let result = walk(child) {
                 return result

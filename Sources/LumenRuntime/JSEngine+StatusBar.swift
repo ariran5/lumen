@@ -8,10 +8,10 @@ import UIKit
 /// (light text on dark bg / dark text on light bg / system default).
 /// `hidden`: bool — hide entirely.
 ///
-/// Реализация: global mutable `StatusBarConfig.current`, читаемый из
+/// Implementation: global mutable `StatusBarConfig.current`, read from
 /// `LumenPageViewController.preferredStatusBarStyle` / `prefersStatusBarHidden`.
-/// Update пихает значение и зовёт `setNeedsStatusBarAppearanceUpdate` на
-/// активной фастаппе.
+/// Update writes the value and calls `setNeedsStatusBarAppearanceUpdate` on
+/// the active fast-app.
 @MainActor
 final class StatusBarConfig {
     static var current = StatusBarConfig()
@@ -19,8 +19,8 @@ final class StatusBarConfig {
     var style: UIStatusBarStyle = .default
     var hidden: Bool = false
 
-    /// Сброс к системному — вызывается при mount нового fast-app, чтобы
-    /// предыдущий выбор не утекал между фастаппами.
+    /// Reset to system — called on mount of a new fast-app so
+    /// previous choice doesn't leak across fast-apps.
     static func reset() {
         current.style = .default
         current.hidden = false
@@ -37,8 +37,8 @@ extension JSEngine {
         guard let lumen = context.objectForKeyedSubscript("lumen") else { return }
         let statusBar = JSValue(newObjectIn: context)!
 
-        // Reset на свежем bridge install — новый engine не должен наследовать
-        // настройку предыдущего fast-app'а.
+        // Reset on fresh bridge install — new engine should not inherit
+        // the previous fast-app's setting.
         MainActor.assumeIsolated { StatusBarConfig.reset() }
 
         let setStyle: @convention(block) (JSValue?) -> Void = { config in

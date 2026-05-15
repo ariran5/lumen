@@ -1,5 +1,10 @@
 name: Lumen
 
+# DEVELOPMENT_TEAM is intentionally empty — simulator builds need no team.
+# For device builds: open Xcode, select the Lumen target → Signing &
+# Capabilities → pick your team from the dropdown. The generated *.xcodeproj
+# is gitignored, so this stays local.
+
 options:
   bundleIdPrefix: com.lumen
   deploymentTarget:
@@ -12,7 +17,7 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     CODE_SIGN_STYLE: Automatic
-    DEVELOPMENT_TEAM: "8N7S2VLD58"
+    DEVELOPMENT_TEAM: ""
     SWIFT_STRICT_CONCURRENCY: complete
     ENABLE_USER_SCRIPT_SANDBOXING: YES
 

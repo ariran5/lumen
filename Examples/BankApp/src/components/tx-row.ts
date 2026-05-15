@@ -1,4 +1,4 @@
-// TxRow — один ряд в списке транзакций. Pressable, открывает detail-страницу.
+// TxRow — single row in the transactions list. Pressable, opens the detail page.
 
 import type { Tx } from '../state/transactions'
 import { Amount } from './amount'
@@ -24,7 +24,7 @@ export function TxRow(tx: Tx): RenderNode {
     View(
       {
         width: 40, height: 40,
-        borderRadius: radius.pill,
+        borderRadius: 20,
         backgroundColor: colors.surfaceElevated,
         alignItems: 'center',
         justifyContent: 'center',

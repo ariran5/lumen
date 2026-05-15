@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// iOS 26 Liquid Glass shell-палитра из docs/browser-ui-mobile.html.
-/// Тёмная база, white-tinted glass, лиловый AI акцент.
+/// iOS 26 Liquid Glass shell palette from docs/browser-ui-mobile.html.
+/// Dark base, white-tinted glass, violet AI accent.
 enum DarkPalette {
     static let bg0 = Color(hex: 0x0B0B0F)
     static let bg1 = Color(hex: 0x111118)

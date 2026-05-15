@@ -7,26 +7,26 @@ struct LumenManifest: Decodable, Sendable {
     let minRuntime: String?
     let dev: Bool?
 
-    /// Список persistent-капабилити которые app хочет запросить.
-    /// Юзер всё равно одобряет каждую через runtime-prompt; манифест
-    /// это лишь декларация, не грант. Известные значения: "notifications",
+    /// List of persistent capabilities the app wants to request.
+    /// User still approves each via a runtime prompt; the manifest
+    /// is only a declaration, not a grant. Known values: "notifications",
     /// "biometric", "camera", "mic", "photos", "location", "contacts".
     let permissions: [String]?
 
-    /// Hosts/wildcards с которыми app может общаться по fetch/WebSocket.
-    /// Дополняет implicit-allow собственного host + поддоменов + любых
-    /// портов. Wildcard `"*"` = allow-all (с варнингом в шелле).
-    /// Пример: `["api.partner.com", "*.cdn.io"]`.
+    /// Hosts/wildcards the app can talk to via fetch/WebSocket.
+    /// Extends implicit-allow of own host + subdomains + any
+    /// ports. Wildcard `"*"` = allow-all (with a shell warning).
+    /// Example: `["api.partner.com", "*.cdn.io"]`.
     let connect: [String]?
 
-    /// Override storage-квоты (default 100MB). Если больше дефолта —
-    /// потребуется отдельный permission-prompt. Принимает "200MB", "1GB".
+    /// Override storage quota (default 100MB). If larger than the default —
+    /// a separate permission prompt is required. Accepts "200MB", "1GB".
     let storageQuota: String?
 
-    /// Управление видимостью shell-chrome'а (URL bar disc снизу).
-    /// `"hidden"` — спрятать целиком (для apps со своим bottom-UI типа
-    /// tab-bar'а). `"compact"` (default) — стандартный compact disc.
-    /// `"full"` — всегда полная адресная строка.
+    /// Controls visibility of shell chrome (the URL bar disc at the bottom).
+    /// `"hidden"` — hide entirely (for apps with their own bottom UI like
+    /// a tab bar). `"compact"` (default) — standard compact disc.
+    /// `"full"` — always full address bar.
     let chrome: String?
 
     enum CodingKeys: String, CodingKey {
@@ -72,8 +72,8 @@ enum BundleProbe: Sendable, Equatable {
     case web
 }
 
-/// Per-host TTL-кэш probe-результата. Чтобы не дёргать `/.well-known/lumen.json`
-/// при каждом visit известного хоста.
+/// Per-host TTL cache of probe results. To avoid hitting `/.well-known/lumen.json`
+/// on every visit to a known host.
 @MainActor
 final class BundleProbeCache {
     static let shared = BundleProbeCache()
@@ -84,7 +84,7 @@ final class BundleProbeCache {
     }
 
     private var entries: [String: Entry] = [:]
-    private let ttl: TimeInterval = 86_400  // 24 часа
+    private let ttl: TimeInterval = 86_400  // 24 hours
 
     func get(host: String) -> BundleProbe? {
         guard let entry = entries[host],
@@ -126,9 +126,9 @@ enum BundleLoader {
         if root.scheme == "lumen" {
             return try loadBuiltin(url: root)
         }
-        // Block 4 gate: HTTPS-only (с исключениями для local dev / Dev Mode).
-        // Прогоняется ДО любого network request'а — даже probe не делаем
-        // по http://untrusted.example.com.
+        // Block 4 gate: HTTPS-only (with exceptions for local dev / Dev Mode).
+        // Runs BEFORE any network request — we don't even probe
+        // for http://untrusted.example.com.
         if let reason = SecurityPolicy.denyReason(forBundleURL: root) {
             throw BundleLoadError.insecureScheme(reason)
         }
