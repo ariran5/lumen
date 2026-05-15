@@ -15,6 +15,17 @@ The goal: 120 fps on ProMotion, the feel of a native app, while still being able
 
 For motivation and architecture see [docs/IDEA.md](docs/IDEA.md), [docs/PLAN.md](docs/PLAN.md), [docs/ROADMAP.md](docs/ROADMAP.md).
 
+## Platform roadmap
+
+| Platform | Status |
+|---|---|
+| **iOS** | active development — current focus |
+| **macOS** | planned — shared SwiftUI/UIKit shell |
+| **Android** | future — separate native runtime |
+| **Windows** | future — separate native runtime |
+
+Aspirational, not a commitment. The current codebase targets iOS only; everything else is an open question until a concrete engine prototype lands.
+
 ## Repository layout
 
 ```
